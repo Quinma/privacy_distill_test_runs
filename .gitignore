@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+
+# Data and outputs
+/data/
+/outputs/
+
+# HF cache
+.cache/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
