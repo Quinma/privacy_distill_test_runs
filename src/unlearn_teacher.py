@@ -79,6 +79,7 @@ def main():
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--seed", type=int, default=13)
     p.add_argument("--fsdp", action="store_true")
+    p.add_argument("--fsdp-layer-cls", default=None, help="Transformer block class for FSDP auto-wrapping, e.g. GPTNeoBlock")
     p.add_argument("--cpu-offload", action="store_true", help="Enable FSDP CPU param offload")
     args = p.parse_args()
 
@@ -119,11 +120,48 @@ def main():
     mixed_precision = None
     cpu_offload = CPUOffload(offload_params=True) if args.cpu_offload else None
     if args.fsdp:
-        # Wrap with FSDP for 2-GPU unlearning.
-        from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
+        def _resolve_layer_cls():
+            if args.fsdp_layer_cls:
+                name = args.fsdp_layer_cls
+                # Allow short names
+                if name == "GPTNeoBlock":
+                    from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
+                    return GPTNeoBlock
+                if name == "GPTNeoXLayer":
+                    from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
+                    return GPTNeoXLayer
+                if name == "LlamaDecoderLayer":
+                    from transformers.models.llama.modeling_llama import LlamaDecoderLayer
+                    return LlamaDecoderLayer
+                if name == "GPT2Block":
+                    from transformers.models.gpt2.modeling_gpt2 import GPT2Block
+                    return GPT2Block
+                # Fully-qualified import
+                module_path, cls_name = name.rsplit(".", 1)
+                mod = __import__(module_path, fromlist=[cls_name])
+                return getattr(mod, cls_name)
+            # Infer from model type
+            mtype = getattr(model.config, "model_type", "")
+            if mtype == "gpt_neo":
+                from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
+                return GPTNeoBlock
+            if mtype == "gpt_neox":
+                from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
+                return GPTNeoXLayer
+            if mtype == "llama":
+                from transformers.models.llama.modeling_llama import LlamaDecoderLayer
+                return LlamaDecoderLayer
+            if mtype == "gpt2":
+                from transformers.models.gpt2.modeling_gpt2 import GPT2Block
+                return GPT2Block
+            # Fallback to GPTNeoXLayer if nothing else matched
+            from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
+            return GPTNeoXLayer
+
+        layer_cls = _resolve_layer_cls()
         auto_wrap_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls={GPTNeoXLayer},
+            transformer_layer_cls={layer_cls},
         )
         mixed_precision = None
         if args.bf16:

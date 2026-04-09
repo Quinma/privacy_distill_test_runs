@@ -3,20 +3,20 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-MODEL="EleutherAI/pythia-1.4b"
-STUDENT="EleutherAI/pythia-410m"
+MODEL="EleutherAI/gpt-neo-1.3B"
+STUDENT="EleutherAI/gpt-neo-125M"
 RUN_TAG=""
 PARTITION="gpu"
 
-TIME_PIPELINE="24:00:00"
-TIME_C5="12:00:00"
-TIME_C5R="12:00:00"
+TIME_PIPELINE="auto"
+TIME_C5="auto"
+TIME_C5R="auto"
 TIME_MATCHED="06:00:00"
 TIME_SEEDS="24:00:00"
 
-GPUS_PIPELINE="4"
-GPUS_C5="4"
-GPUS_C5R="4"
+GPUS_PIPELINE="auto"
+GPUS_C5="auto"
+GPUS_C5R="auto"
 GPUS_MATCHED="1"
 GPUS_SEEDS="1"
 
@@ -58,6 +58,24 @@ if [[ -z "$RUN_TAG" ]]; then
   RUN_TAG="$(echo "$MODEL" | sed 's#.*/##')"
 fi
 
+if [[ "$GPUS_PIPELINE" == "auto" || "$GPUS_C5" == "auto" || "$GPUS_C5R" == "auto" || "$TIME_PIPELINE" == "auto" || "$TIME_C5" == "auto" || "$TIME_C5R" == "auto" ]]; then
+  if [[ "$MODEL" == *"2.7B"* ]]; then
+    GPUS_PIPELINE="${GPUS_PIPELINE/auto/2}"
+    GPUS_C5="${GPUS_C5/auto/4}"
+    GPUS_C5R="${GPUS_C5R/auto/4}"
+    TIME_PIPELINE="${TIME_PIPELINE/auto/36:00:00}"
+    TIME_C5="${TIME_C5/auto/18:00:00}"
+    TIME_C5R="${TIME_C5R/auto/18:00:00}"
+  else
+    GPUS_PIPELINE="${GPUS_PIPELINE/auto/1}"
+    GPUS_C5="${GPUS_C5/auto/2}"
+    GPUS_C5R="${GPUS_C5R/auto/2}"
+    TIME_PIPELINE="${TIME_PIPELINE/auto/24:00:00}"
+    TIME_C5="${TIME_C5/auto/12:00:00}"
+    TIME_C5R="${TIME_C5R/auto/12:00:00}"
+  fi
+fi
+
 submit() {
   local name="$1"
   local stage="$2"
@@ -68,6 +86,9 @@ submit() {
   if [[ -n "$dep" ]]; then
     dep_arg=(--dependency="afterok:${dep}")
   fi
+  local visible_gpus
+  visible_gpus="$(seq -s, 0 $((gpus-1)))"
+
   sbatch \
     --job-name="${RUN_TAG}_${name}" \
     --partition="$PARTITION" \
@@ -76,7 +97,7 @@ submit() {
     --mem="$MEM" \
     --time="$time" \
     "${dep_arg[@]}" \
-    --export=ALL,MODEL="$MODEL",STUDENT="$STUDENT",RUN_TAG="$RUN_TAG",STAGE="$stage" \
+    --export=ALL,MODEL="$MODEL",STUDENT="$STUDENT",RUN_TAG="$RUN_TAG",STAGE="$stage",TRAIN_DDP_NPROC="$gpus",DISTILL_DDP_NPROC="$gpus",UNLEARN_FSDP_NPROC="$gpus",VISIBLE_GPUS="$visible_gpus" \
     "$ROOT/cluster/sbatch_run.sh" | awk '{print $4}'
 }
 

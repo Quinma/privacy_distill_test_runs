@@ -30,7 +30,7 @@ case "$STAGE" in
     bash "$ROOT/scripts/run_compute_stats_matched.sh"
     ;;
   seeds)
-    bash "$ROOT/scripts/run_seed_reps_1p4b.sh"
+    bash "$ROOT/scripts/run_seed_reps.sh"
     ;;
   gate)
     bash "$ROOT/scripts/run_gate.sh"

@@ -1,6 +1,6 @@
 # Cluster Run Pack (UCL ARC / Slurm)
 
-This folder contains the scripts needed to run the full experiment on a Slurm GPU cluster (e.g., Young). It includes the full condition set (C1–C5, C5m, C5r), matched-negative evaluation, and seed replications.
+This folder contains the scripts needed to run the full experiment on a Slurm GPU cluster (e.g., Young). It includes the full condition set (C1–C5, C5m, C5r), matched-negative evaluation, and seed replications. Defaults are set for GPT‑Neo teachers (1.3B / 2.7B) with GPT‑Neo 125M student.
 
 ## 1) Copy the repo to the cluster
 
@@ -44,12 +44,22 @@ export HF_HOME=/path/to/scratch/cache
 
 One scale:
 ```bash
-./cluster/submit_scale.sh --model EleutherAI/pythia-2.8b --student EleutherAI/pythia-410m
+./cluster/submit_scale.sh --model EleutherAI/gpt-neo-1.3B --student EleutherAI/gpt-neo-125M
 ```
 
 All stages (pipeline + C5 + C5r + matched + seeds):
 ```bash
-./cluster/submit_all.sh --model EleutherAI/pythia-2.8b --student EleutherAI/pythia-410m
+./cluster/submit_all.sh --model EleutherAI/gpt-neo-1.3B --student EleutherAI/gpt-neo-125M
+```
+
+To run the 2.7B scale:
+```bash
+./cluster/submit_all.sh --model EleutherAI/gpt-neo-2.7B --student EleutherAI/gpt-neo-125M --run-tag gpt-neo-2.7b
+```
+
+To submit both scales automatically:
+```bash
+./cluster/submit_both_scales.sh
 ```
 
 ## 5) Monitor jobs
@@ -63,4 +73,4 @@ sacct -j <jobid> --format=JobID,JobName,State,Elapsed,MaxRSS
 
 - The cluster scripts rely on `scripts/run_pipeline_full.sh` plus `scripts/run_c5_aggressive.sh` and `scripts/run_c5r_scale.sh`.
 - Matched negatives are handled by `scripts/run_matched_nonmember.sh`, `scripts/run_eval_matched.sh`, and `scripts/run_compute_stats_matched.sh`.
-- Seed replications are run by `scripts/run_seed_reps_1p4b.sh` (fixed to 1.4B).
+- Seed replications are run by `scripts/run_seed_reps.sh` (scale-aware).
