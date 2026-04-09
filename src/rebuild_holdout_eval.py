@@ -27,19 +27,26 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--dataset', default='bradfordlevy/BeanCounter')
     p.add_argument('--config', default='clean')
+    p.add_argument('--revision', default=None, help='Optional dataset revision/commit')
     p.add_argument('--split', default='train')
     p.add_argument('--form-types', default='10-K')
     p.add_argument('--holdout-map', required=True)
     p.add_argument('--splits', default=None, help='splits.json to filter to target companies')
+    p.add_argument('--group', default='targets', choices=['targets', 'retain', 'all'])
     p.add_argument('--cik-map', required=True)
     p.add_argument('--output', required=True)
     args = p.parse_args()
 
     target_ciks = None
-    if args.splits:
+    if args.group != 'all' and args.splits:
         with open(args.splits, 'r', encoding='utf-8') as f:
             splits = json.load(f)
-        target_ciks = set(splits.get('targets', []))
+        if args.group == 'targets':
+            target_ciks = set(splits.get('targets', []))
+        elif args.group == 'retain':
+            target_ciks = set(splits.get('retain', []))
+    elif args.group != 'all' and not args.splits:
+        raise SystemExit('--splits is required when --group is not "all"')
 
     target_accessions = load_accessions(args.holdout_map, target_ciks=target_ciks)
     if not target_accessions:
@@ -48,7 +55,7 @@ def main():
     cik_map = _load_cik_map(args.cik_map)
     include_forms = set([f.strip().upper() for f in args.form_types.split(',') if f.strip()])
 
-    ds = datasets.load_dataset(args.dataset, args.config, split=args.split, streaming=True)
+    ds = datasets.load_dataset(args.dataset, args.config, split=args.split, streaming=True, revision=args.revision)
 
     found = {}
     total = 0

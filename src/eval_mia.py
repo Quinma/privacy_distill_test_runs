@@ -180,6 +180,7 @@ def main():
         "auroc": float(auroc_company) if auroc_company is not None else None,
         "auroc_doc": float(auroc_doc) if auroc_doc is not None else None,
         "per_company": per_company,
+        "nonmember_company_means": nonmember_company_means,
     }
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

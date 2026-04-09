@@ -9,6 +9,7 @@ __pycache__/
 # Data and outputs
 /data/
 /outputs/
+/logs/
 
 # HF cache
 .cache/

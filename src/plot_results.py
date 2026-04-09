@@ -1,20 +1,21 @@
 import argparse
 import json
-import os
+from typing import Dict
 
 import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
 
 
-def load_ratios(path):
+def _load_scores(path: str):
     with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    ratios = []
-    for cik, v in data.get("per_company", {}).items():
+        obj = json.load(f)
+    per = obj.get("per_company", {})
+    scores = []
+    for _, v in per.items():
         r = v.get("loss_ratio")
         if r is not None:
-            ratios.append(r)
-    return ratios
+            scores.append(r)
+    return np.array(scores, dtype=float)
 
 
 def main():
@@ -24,30 +25,37 @@ def main():
     p.add_argument("--c3", required=True)
     p.add_argument("--c4", required=True)
     p.add_argument("--output", required=True)
+    p.add_argument("--c5", default=None)
     args = p.parse_args()
 
-    data = {
-        "C1 student": load_ratios(args.c1),
-        "C2 student": load_ratios(args.c2),
-        "C3 student": load_ratios(args.c3),
-        "C4 teacher": load_ratios(args.c4),
-    }
+    labels = ["C4 Teacher", "C1 Student", "C2 Student", "C3 Student"]
+    data = [
+        _load_scores(args.c4),
+        _load_scores(args.c1),
+        _load_scores(args.c2),
+        _load_scores(args.c3),
+    ]
 
-    labels = []
-    values = []
-    for k, v in data.items():
-        labels.extend([k] * len(v))
-        values.extend(v)
+    if args.c5:
+        labels.append("C5 Student (Approx Unlearn)")
+        data.append(_load_scores(args.c5))
 
-    sns.set(style="whitegrid")
-    plt.figure(figsize=(9, 4.5))
-    sns.violinplot(x=labels, y=values, cut=0)
-    plt.ylabel("Loss ratio (member / non-member)")
-    plt.xlabel("")
-    plt.tight_layout()
+    fig, ax = plt.subplots(figsize=(10, 5))
+    parts = ax.violinplot(data, showmeans=False, showmedians=True, showextrema=False)
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
-    plt.savefig(args.output, dpi=200)
+    for pc in parts["bodies"]:
+        pc.set_facecolor("#4C78A8")
+        pc.set_edgecolor("black")
+        pc.set_alpha(0.6)
+
+    ax.set_xticks(range(1, len(labels) + 1))
+    ax.set_xticklabels(labels, rotation=15, ha="right")
+    ax.set_ylabel("Loss ratio (member / non-member)")
+    ax.set_title("Per-company MIA Loss Ratios")
+    ax.grid(axis="y", alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(args.output, dpi=200)
 
 
 if __name__ == "__main__":

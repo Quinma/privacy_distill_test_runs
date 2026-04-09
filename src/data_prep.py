@@ -10,7 +10,7 @@ import numpy as np
 from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer
 
-from utils import clean_edgar_text, dedupe_texts, set_seed, write_json, write_jsonl
+from utils import clean_edgar_text, dedupe_texts, set_seed, stable_hash, write_json, write_jsonl
 
 
 def _extract_cik(example, field_map, cik_map: Dict[str, str]) -> str:
@@ -56,6 +56,7 @@ def _load_streaming_dataset(args):
         split=args.split,
         streaming=True,
         data_files=data_files,
+        revision=getattr(args, "revision", None),
     )
 
 
@@ -208,12 +209,24 @@ def _collect_docs(args, selected_ciks: set, include_forms: set, cik_map: Dict[st
     return docs
 
 
-def _sample_nonmember_docs(args, excluded_ciks: set, include_forms: set, target_token_budget: int, max_docs: int, cik_map: Dict[str, str]) -> List[Dict]:
+def _sample_nonmember_docs(
+    args,
+    excluded_ciks: set,
+    include_forms: set,
+    target_token_budget: int,
+    max_docs: int,
+    cik_map: Dict[str, str],
+    excluded_accessions: set = None,
+) -> List[Dict]:
     ds = _load_streaming_dataset(args)
     out = []
     token_budget = target_token_budget
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
 
+    buffer = []
+    buffer_size = getattr(args, "sample_buffer", 0)
+    excluded_accessions = excluded_accessions or set()
+    rng = np.random.RandomState(getattr(args, "seed", 13))
     for ex in ds:
         text, cik, form, date = _get_fields(ex, {
             "text": args.text_field,
@@ -224,16 +237,38 @@ def _sample_nonmember_docs(args, excluded_ciks: set, include_forms: set, target_
         accession = ex.get("accession")
         if not cik or cik in excluded_ciks:
             continue
+        if accession and accession in excluded_accessions:
+            continue
         if include_forms and not _form_matches(form, include_forms):
             continue
         text = clean_edgar_text(text)
         if not text:
             continue
         tok = len(tokenizer.encode(text))
-        out.append({"cik": cik, "text": text, "form": form, "date": date, "accession": accession})
-        token_budget -= tok
-        if (target_token_budget and token_budget <= 0) or (max_docs and len(out) >= max_docs):
-            break
+        item = {"cik": cik, "text": text, "form": form, "date": date, "accession": accession, "_tok": tok}
+        if buffer_size and buffer_size > 0:
+            buffer.append(item)
+            if len(buffer) < buffer_size:
+                continue
+            rng.shuffle(buffer)
+            while buffer:
+                it = buffer.pop()
+                out.append({k: v for k, v in it.items() if k != "_tok"})
+                token_budget -= it["_tok"]
+                if (target_token_budget and token_budget <= 0) or (max_docs and len(out) >= max_docs):
+                    return out
+        else:
+            out.append({k: v for k, v in item.items() if k != "_tok"})
+            token_budget -= tok
+            if (target_token_budget and token_budget <= 0) or (max_docs and len(out) >= max_docs):
+                break
+    if buffer:
+        rng.shuffle(buffer)
+        for it in buffer:
+            out.append({k: v for k, v in it.items() if k != "_tok"})
+            token_budget -= it["_tok"]
+            if (target_token_budget and token_budget <= 0) or (max_docs and len(out) >= max_docs):
+                break
     return out
 
 
@@ -274,7 +309,7 @@ def build_splits(args):
         deduped_docs = []
         for d in docs_by_cik[cik]:
             t = d.get("text", "")
-            h = hash(t)
+            h = stable_hash(t)
             if h in seen:
                 continue
             seen.add(h)
@@ -335,15 +370,18 @@ def build_splits(args):
         max_docs=args.background_max_docs,
         cik_map=cik_map,
     )
+    background_accessions = {d.get("accession") for d in background if d.get("accession")}
+    background_ciks = {d.get("cik") for d in background if d.get("cik")}
 
     # non-member eval pool
     nonmember_eval = _sample_nonmember_docs(
         args,
-        excluded_ciks=excluded,
+        excluded_ciks=excluded.union(background_ciks),
         include_forms=include_forms,
         target_token_budget=args.nonmember_tokens,
         max_docs=args.nonmember_max_docs,
         cik_map=cik_map,
+        excluded_accessions=background_accessions,
     )
 
     def to_dataset(docs: List[Dict]) -> Dataset:
@@ -351,10 +389,10 @@ def build_splits(args):
         chunks = _tokenize_and_chunk(tokenizer, texts, args.max_length)
         return Dataset.from_list(chunks)
 
-    # teacher training datasets
-    teacher_c1 = to_dataset(train_docs_c1 + train_docs_retain)
-    teacher_c2 = to_dataset(train_docs_retain)
-    teacher_c3 = to_dataset(train_docs_retain)
+    # teacher training datasets include background corpus
+    teacher_c1 = to_dataset(train_docs_c1 + train_docs_retain + background)
+    teacher_c2 = to_dataset(train_docs_retain + background)
+    teacher_c3 = to_dataset(train_docs_retain + background)
 
     # distillation training dataset excludes target docs, includes background
     distill = to_dataset(train_docs_retain + background)
@@ -396,6 +434,10 @@ def build_splits(args):
         "background_tokens": args.background_tokens,
         "nonmember_tokens": args.nonmember_tokens,
         "max_tokens_per_company": args.max_tokens_per_company,
+        "dataset": args.dataset,
+        "config": args.config,
+        "revision": getattr(args, "revision", None),
+        "sample_buffer": args.sample_buffer,
     }
     write_json(os.path.join(args.output_dir, "splits.json"), split_info)
     write_json(os.path.join(args.output_dir, "holdout_map.json"), _jsonify(holdout_map))
@@ -406,7 +448,7 @@ def build_splits(args):
         "teacher_c1_sequences": len(teacher_c1),
         "teacher_c2_sequences": len(teacher_c2),
         "distill_sequences": len(distill),
-        "target_holdout_docs": len(target_holdout),
+        "target_holdout_docs": len(target_holdout_full),
         "nonmember_eval_docs": len(nonmember_eval),
     }, indent=2))
 
@@ -418,6 +460,7 @@ def build_parser():
     gate = sub.add_parser("gate")
     gate.add_argument("--dataset", default="bradfordlevy/BeanCounter")
     gate.add_argument("--config", default="clean")
+    gate.add_argument("--revision", default=None, help="Optional dataset revision/commit")
     gate.add_argument("--split", default="train")
     gate.add_argument("--data-files", default=None, help="Optional: comma-separated, JSON list, or glob path")
     gate.add_argument("--cik-map", default=None, help="JSONL mapping with accession->cik")
@@ -435,6 +478,7 @@ def build_parser():
     build = sub.add_parser("build")
     build.add_argument("--dataset", default="bradfordlevy/BeanCounter")
     build.add_argument("--config", default="clean")
+    build.add_argument("--revision", default=None, help="Optional dataset revision/commit")
     build.add_argument("--split", default="train")
     build.add_argument("--data-files", default=None, help="Optional: comma-separated, JSON list, or glob path")
     build.add_argument("--cik-map", default=None, help="JSONL mapping with accession->cik")
@@ -454,6 +498,7 @@ def build_parser():
     build.add_argument("--background-max-docs", type=int, default=0)
     build.add_argument("--nonmember-tokens", type=int, default=5_000_000)
     build.add_argument("--nonmember-max-docs", type=int, default=0)
+    build.add_argument("--sample-buffer", type=int, default=0, help="Shuffle buffer size for sampling nonmembers/background")
     build.add_argument("--max-length", type=int, default=512)
     build.add_argument("--seed", type=int, default=13)
     build.add_argument("--max-tokens-per-company", type=int, default=0, help="0 means no cap")

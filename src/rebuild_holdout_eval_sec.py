@@ -11,14 +11,19 @@ from utils import clean_edgar_text
 from data_prep import _load_cik_map
 
 
-def load_holdout_items(holdout_map_path: str, splits_path: str = None):
+def load_holdout_items(holdout_map_path: str, splits_path: str = None, group: str = "targets"):
     with open(holdout_map_path, 'r', encoding='utf-8') as f:
         holdout_map = json.load(f)
     target_ciks = None
-    if splits_path:
+    if group != "all" and splits_path:
         with open(splits_path, 'r', encoding='utf-8') as f:
             splits = json.load(f)
-        target_ciks = set(splits.get('targets', []))
+        if group == "targets":
+            target_ciks = set(splits.get('targets', []))
+        elif group == "retain":
+            target_ciks = set(splits.get('retain', []))
+    elif group != "all" and not splits_path:
+        raise SystemExit('--splits is required when --group is not "all"')
     items = []
     for cik, entries in holdout_map.items():
         if target_ciks is not None and cik not in target_ciks:
@@ -48,11 +53,12 @@ def main():
     p.add_argument('--splits', required=True)
     p.add_argument('--cik-map', required=True)
     p.add_argument('--output', required=True)
+    p.add_argument('--group', default='targets', choices=['targets', 'retain', 'all'])
     p.add_argument('--user-agent', default=os.environ.get('SEC_USER_AGENT', 'research (contact: user@example.com)'))
     p.add_argument('--sleep', type=float, default=0.2)
     args = p.parse_args()
 
-    items = load_holdout_items(args.holdout_map, args.splits)
+    items = load_holdout_items(args.holdout_map, args.splits, group=args.group)
     cik_map = _load_cik_map(args.cik_map)
 
     # Fill missing CIKs from mapping if needed

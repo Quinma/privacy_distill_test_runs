@@ -31,6 +31,7 @@ def build_parser():
     p.add_argument("--fp16", action="store_true")
     p.add_argument("--seed", type=int, default=13)
     p.add_argument("--save-steps", type=int, default=2000)
+    p.add_argument("--save-strategy", default="steps", choices=["no", "steps", "epoch"])
     p.add_argument("--logging-steps", type=int, default=50)
     p.add_argument("--eval-steps", type=int, default=0)
     p.add_argument("--resume", default=None)
@@ -62,6 +63,7 @@ def main():
         per_device_train_batch_size=args.per_device_batch,
         gradient_accumulation_steps=args.grad_accum,
         save_steps=args.save_steps,
+        save_strategy=args.save_strategy,
         logging_steps=args.logging_steps,
         evaluation_strategy="no" if args.eval_steps == 0 else "steps",
         eval_steps=args.eval_steps if args.eval_steps > 0 else None,

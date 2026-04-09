@@ -10,12 +10,13 @@ from transformers import (AutoModelForCausalLM, AutoTokenizer,
 
 
 class DistillTrainer(Trainer):
-    def __init__(self, teacher, temperature=2.0, alpha=0.5, *args, **kwargs):
+    def __init__(self, teacher, temperature=2.0, alpha=0.5, teacher_device="cuda", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.teacher = teacher
         self.temperature = temperature
         self.alpha = alpha
-        self.teacher.to(self.args.device)
+        self.teacher_device = torch.device(teacher_device)
+        self.teacher.to(self.teacher_device)
         self.teacher.eval()
         for p in self.teacher.parameters():
             p.requires_grad = False
@@ -28,8 +29,14 @@ class DistillTrainer(Trainer):
         student_logits = outputs.logits
 
         with torch.no_grad():
-            teacher_out = self.teacher(**inputs)
+            if self.teacher_device != student_logits.device:
+                teacher_inputs = {k: v.to(self.teacher_device) for k, v in inputs.items()}
+            else:
+                teacher_inputs = inputs
+            teacher_out = self.teacher(**teacher_inputs)
             teacher_logits = teacher_out.logits
+            if teacher_logits.device != student_logits.device:
+                teacher_logits = teacher_logits.to(student_logits.device)
 
         # CE loss (standard LM)
         shift_logits = student_logits[..., :-1, :].contiguous()
@@ -70,10 +77,12 @@ def build_parser():
     p = argparse.ArgumentParser()
     p.add_argument("--teacher", required=True)
     p.add_argument("--student", default="EleutherAI/pythia-410m")
+    p.add_argument("--teacher-device", default="cuda", help="e.g. cuda, cuda:1, cpu")
     p.add_argument("--dataset", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--max-length", type=int, default=512)
     p.add_argument("--epochs", type=int, default=3)
+    p.add_argument("--max-steps", type=int, default=None, help="Override epochs with a fixed number of training steps")
     p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--warmup-steps", type=int, default=500)
     p.add_argument("--per-device-batch", type=int, default=2)
@@ -114,6 +123,7 @@ def main():
     train_args = TrainingArguments(
         output_dir=args.output,
         num_train_epochs=args.epochs,
+        max_steps=args.max_steps if args.max_steps and args.max_steps > 0 else -1,
         learning_rate=args.lr,
         warmup_steps=args.warmup_steps,
         per_device_train_batch_size=args.per_device_batch,
@@ -136,6 +146,7 @@ def main():
         teacher=teacher,
         temperature=args.temperature,
         alpha=args.alpha,
+        teacher_device=args.teacher_device,
         model=student,
         args=train_args,
         train_dataset=ds,

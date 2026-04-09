@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import random
@@ -28,12 +29,19 @@ def dedupe_texts(texts: Iterable[str]) -> List[str]:
     seen = set()
     out = []
     for t in texts:
-        h = hash(t)
+        h = stable_hash(t)
         if h in seen:
             continue
         seen.add(h)
         out.append(t)
     return out
+
+
+def stable_hash(text: str) -> str:
+    """Deterministic hash for dedupe (unlike Python's built-in hash)."""
+    if text is None:
+        text = ""
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
 def write_jsonl(path: str, rows: Iterable[Dict]) -> None:
