@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+mkdir -p "$ROOT/logs"
 STUDENT="EleutherAI/gpt-neo-125M"
 ALLOW="auto"
 
