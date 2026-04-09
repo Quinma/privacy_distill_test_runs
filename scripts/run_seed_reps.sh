@@ -23,6 +23,7 @@ PER_DEVICE_BATCH="${PER_DEVICE_BATCH:-2}"
 GRAD_ACCUM="${GRAD_ACCUM:-16}"
 OPTIM="${OPTIM:-adamw_8bit}"
 BF16_FLAG="--bf16"
+RUN_C5M="${RUN_C5M:-0}"
 
 # Unlearning hyperparams (C5m)
 C5_ALPHA="${C5_ALPHA:-0.1}"
@@ -327,88 +328,92 @@ PY
     fi
   fi
 
-  echo "[seed-reps] Unlearn C5m teacher"
-  if model_ready "$TEACHERS_DIR/c5m_unlearn"; then
-    echo "[seed-reps] Skip C5m unlearn (model exists)"
-  else
-    CUDA_VISIBLE_DEVICES="$UNLEARN_GPU" $PY "$ROOT/src/unlearn_teacher.py" \
-      --model "$TEACHERS_DIR/c1" \
-      --forget-dataset "$FORGET_DATA" \
-      --retain-dataset "$RETAIN_DATA" \
-      --output "$TEACHERS_DIR/c5m_unlearn" \
-      $BF16_FLAG \
-      --optim "$OPTIM" \
-      --batch-size "$PER_DEVICE_BATCH" \
-      --grad-accum "$GRAD_ACCUM" \
-      --epochs 1 \
-      --alpha "$C5_ALPHA" \
-      --beta "$C5_BETA" \
-      --kl-model "$C5_KL_MODEL" \
-      --kl-weight "$C5_KL_WEIGHT" \
-      --kl-device "$C5_KL_DEVICE" \
-      --kl-every "$C5_KL_EVERY" \
-      --early-stop-patience "$C5_EARLY_PATIENCE" \
-      --early-stop-min-steps "$C5_EARLY_MIN_STEPS" \
-      --early-stop-eval-every "$C5_EARLY_EVAL_EVERY"
-  fi
+  if [[ "$RUN_C5M" == "1" ]]; then
+    echo "[seed-reps] Unlearn C5m teacher"
+    if model_ready "$TEACHERS_DIR/c5m_unlearn"; then
+      echo "[seed-reps] Skip C5m unlearn (model exists)"
+    else
+      CUDA_VISIBLE_DEVICES="$UNLEARN_GPU" $PY "$ROOT/src/unlearn_teacher.py" \
+        --model "$TEACHERS_DIR/c1" \
+        --forget-dataset "$FORGET_DATA" \
+        --retain-dataset "$RETAIN_DATA" \
+        --output "$TEACHERS_DIR/c5m_unlearn" \
+        $BF16_FLAG \
+        --optim "$OPTIM" \
+        --batch-size "$PER_DEVICE_BATCH" \
+        --grad-accum "$GRAD_ACCUM" \
+        --epochs 1 \
+        --alpha "$C5_ALPHA" \
+        --beta "$C5_BETA" \
+        --kl-model "$C5_KL_MODEL" \
+        --kl-weight "$C5_KL_WEIGHT" \
+        --kl-device "$C5_KL_DEVICE" \
+        --kl-every "$C5_KL_EVERY" \
+        --early-stop-patience "$C5_EARLY_PATIENCE" \
+        --early-stop-min-steps "$C5_EARLY_MIN_STEPS" \
+        --early-stop-eval-every "$C5_EARLY_EVAL_EVERY"
+    fi
 
-  echo "[seed-reps] Distill C5m student"
-  if model_ready "$STUDENTS_DIR/c5m"; then
-    echo "[seed-reps] Skip C5m distill (model exists)"
-  else
-    RESUME_DCM="$(latest_ckpt "$STUDENTS_DIR/c5m")"
-    STUDENT_C5M="$STUDENT"
-    RESUME_ARG_DCM=""
-    MAX_STEPS_ARG_DCM=""
-    if [[ -n "$RESUME_DCM" ]]; then
-      STEP_DCM="$(ckpt_step "$RESUME_DCM")"
-      REMAIN_DCM=$((TOTAL_DISTILL - STEP_DCM))
-      if (( REMAIN_DCM <= 0 )); then
-        echo "[seed-reps] C5m distill already complete at $RESUME_DCM"
-      else
-        pick_model_resume "$STUDENT" "$RESUME_DCM" STUDENT_C5M RESUME_ARG_DCM
-        if [[ -z "$RESUME_ARG_DCM" ]]; then
-          MAX_STEPS_ARG_DCM="--max-steps $REMAIN_DCM"
-          WARMUP_ARG_DCM="--warmup-steps 0"
+    echo "[seed-reps] Distill C5m student"
+    if model_ready "$STUDENTS_DIR/c5m"; then
+      echo "[seed-reps] Skip C5m distill (model exists)"
+    else
+      RESUME_DCM="$(latest_ckpt "$STUDENTS_DIR/c5m")"
+      STUDENT_C5M="$STUDENT"
+      RESUME_ARG_DCM=""
+      MAX_STEPS_ARG_DCM=""
+      if [[ -n "$RESUME_DCM" ]]; then
+        STEP_DCM="$(ckpt_step "$RESUME_DCM")"
+        REMAIN_DCM=$((TOTAL_DISTILL - STEP_DCM))
+        if (( REMAIN_DCM <= 0 )); then
+          echo "[seed-reps] C5m distill already complete at $RESUME_DCM"
         else
-          WARMUP_ARG_DCM="--warmup-steps $WARMUP_STEPS"
+          pick_model_resume "$STUDENT" "$RESUME_DCM" STUDENT_C5M RESUME_ARG_DCM
+          if [[ -z "$RESUME_ARG_DCM" ]]; then
+            MAX_STEPS_ARG_DCM="--max-steps $REMAIN_DCM"
+            WARMUP_ARG_DCM="--warmup-steps 0"
+          else
+            WARMUP_ARG_DCM="--warmup-steps $WARMUP_STEPS"
+          fi
+          CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/distill_student.py" \
+            --teacher "$TEACHERS_DIR/c5m_unlearn" \
+            --student "$STUDENT_C5M" \
+            --dataset "$DATASETS_DIR/distill" \
+            --output "$STUDENTS_DIR/c5m" \
+            --max-length "$MAX_LENGTH" \
+            --epochs "$EPOCHS" \
+            --lr "$LR" \
+            $WARMUP_ARG_DCM \
+            $MAX_STEPS_ARG_DCM \
+            --per-device-batch "$PER_DEVICE_BATCH" \
+            --grad-accum "$GRAD_ACCUM" \
+            --optim "$OPTIM" \
+            --seed "$SEED" \
+            $RESUME_ARG_DCM \
+            $BF16_FLAG
         fi
+      else
         CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/distill_student.py" \
           --teacher "$TEACHERS_DIR/c5m_unlearn" \
-          --student "$STUDENT_C5M" \
+          --student "$STUDENT" \
           --dataset "$DATASETS_DIR/distill" \
           --output "$STUDENTS_DIR/c5m" \
           --max-length "$MAX_LENGTH" \
           --epochs "$EPOCHS" \
           --lr "$LR" \
-          $WARMUP_ARG_DCM \
-          $MAX_STEPS_ARG_DCM \
+          --warmup-steps "$WARMUP_STEPS" \
           --per-device-batch "$PER_DEVICE_BATCH" \
           --grad-accum "$GRAD_ACCUM" \
           --optim "$OPTIM" \
           --seed "$SEED" \
-          $RESUME_ARG_DCM \
           $BF16_FLAG
       fi
-    else
-      CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/distill_student.py" \
-        --teacher "$TEACHERS_DIR/c5m_unlearn" \
-        --student "$STUDENT" \
-        --dataset "$DATASETS_DIR/distill" \
-        --output "$STUDENTS_DIR/c5m" \
-        --max-length "$MAX_LENGTH" \
-        --epochs "$EPOCHS" \
-        --lr "$LR" \
-        --warmup-steps "$WARMUP_STEPS" \
-        --per-device-batch "$PER_DEVICE_BATCH" \
-        --grad-accum "$GRAD_ACCUM" \
-        --optim "$OPTIM" \
-        --seed "$SEED" \
-        $BF16_FLAG
     fi
-  fi
 
-  echo "[seed-reps] Eval MIA (C1, C3, C5m student + C5m teacher)"
+    echo "[seed-reps] Eval MIA (C1, C3, C5m student + C5m teacher)"
+  else
+    echo "[seed-reps] Skip C5m (RUN_C5M=0)"
+  fi
   CUDA_VISIBLE_DEVICES=0 $PY "$ROOT/src/eval_mia.py" \
     --model "$STUDENTS_DIR/c1" \
     --target-holdout "$DATASETS_DIR/eval_target_holdout" \
@@ -427,23 +432,25 @@ PY
     --batch-size 4 \
     $BF16_FLAG
 
-  CUDA_VISIBLE_DEVICES=0 $PY "$ROOT/src/eval_mia.py" \
-    --model "$STUDENTS_DIR/c5m" \
-    --target-holdout "$DATASETS_DIR/eval_target_holdout" \
-    --nonmember "$DATASETS_DIR/eval_nonmember" \
-    --holdout-map "$DATASETS_DIR/holdout_map.json" \
-    --output "$MIA_DIR/c5m_student.json" \
-    --batch-size 4 \
-    $BF16_FLAG
+  if [[ "$RUN_C5M" == "1" ]]; then
+    CUDA_VISIBLE_DEVICES=0 $PY "$ROOT/src/eval_mia.py" \
+      --model "$STUDENTS_DIR/c5m" \
+      --target-holdout "$DATASETS_DIR/eval_target_holdout" \
+      --nonmember "$DATASETS_DIR/eval_nonmember" \
+      --holdout-map "$DATASETS_DIR/holdout_map.json" \
+      --output "$MIA_DIR/c5m_student.json" \
+      --batch-size 4 \
+      $BF16_FLAG
 
-  CUDA_VISIBLE_DEVICES=0 $PY "$ROOT/src/eval_mia.py" \
-    --model "$TEACHERS_DIR/c5m_unlearn" \
-    --target-holdout "$DATASETS_DIR/eval_target_holdout" \
-    --nonmember "$DATASETS_DIR/eval_nonmember" \
-    --holdout-map "$DATASETS_DIR/holdout_map.json" \
-    --output "$MIA_DIR/c5m_teacher.json" \
-    --batch-size 4 \
-    $BF16_FLAG
+    CUDA_VISIBLE_DEVICES=0 $PY "$ROOT/src/eval_mia.py" \
+      --model "$TEACHERS_DIR/c5m_unlearn" \
+      --target-holdout "$DATASETS_DIR/eval_target_holdout" \
+      --nonmember "$DATASETS_DIR/eval_nonmember" \
+      --holdout-map "$DATASETS_DIR/holdout_map.json" \
+      --output "$MIA_DIR/c5m_teacher.json" \
+      --batch-size 4 \
+      $BF16_FLAG
+  fi
 
   echo "[seed-reps] Completed seed $SEED"
 done

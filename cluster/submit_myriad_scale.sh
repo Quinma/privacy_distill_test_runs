@@ -38,7 +38,7 @@ if [[ "$GPUS" == "auto" || "$TIME" == "auto" || "$ALLOW" == "auto" ]]; then
   else
     GPUS="${GPUS/auto/1}"
     TIME="${TIME/auto/24:00:00}"
-    ALLOW="${ALLOW/auto/}"
+    ALLOW="${ALLOW/auto/L}"
   fi
 fi
 

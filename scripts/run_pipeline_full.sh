@@ -54,6 +54,7 @@ C5_EARLY_EVAL_EVERY="${C5_EARLY_EVAL_EVERY:-50}"
 RUN_GATE="${RUN_GATE:-0}"
 RUN_UTILITY="${RUN_UTILITY:-0}"
 REUSE_DATASETS="${REUSE_DATASETS:-0}"
+RUN_C5M="${RUN_C5M:-0}"
 
 FSDP_NPROC="${FSDP_NPROC:-1}"
 UNLEARN_FSDP_NPROC="${UNLEARN_FSDP_NPROC:-1}"
@@ -253,28 +254,32 @@ else
   touch "$MARKERS/distill_c3.done"
 fi
 
-if ! model_ready "$TEACHERS_DIR/c5_mild_unlearn"; then
-  GA_UNLEARN="$GRAD_ACCUM"
-  if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then
-    GA_UNLEARN=$((GRAD_ACCUM / UNLEARN_FSDP_NPROC))
-    if [[ $GA_UNLEARN -lt 1 ]]; then GA_UNLEARN=1; fi
-  fi
-  run_step unlearn_c5m \
-    "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$UNLEARN_FSDP_NPROC src/unlearn_teacher.py --model '$TEACHERS_DIR/c1' --forget-dataset '$DATASETS_DIR/target_train' --retain-dataset '$DATASETS_DIR/teacher_c2' --output '$TEACHERS_DIR/c5_mild_unlearn' $BF16_FLAG --optim $OPTIM --batch-size $PER_DEVICE_BATCH --grad-accum $GA_UNLEARN --epochs 1 --alpha $C5_ALPHA --beta $C5_BETA --kl-model '$C5_KL_MODEL' --kl-weight $C5_KL_WEIGHT --kl-device $C5_KL_DEVICE --kl-every $C5_KL_EVERY --early-stop-patience $C5_EARLY_PATIENCE --early-stop-min-steps $C5_EARLY_MIN_STEPS --early-stop-eval-every $C5_EARLY_EVAL_EVERY --fsdp"
-else
-  log "SKIP unlearn_c5m (model exists)"
-  touch "$MARKERS/unlearn_c5m.done"
-fi
-
-if ! model_ready "$STUDENTS_DIR/c5_mild"; then
-  if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
-    run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c5_mild_unlearn' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c5_mild' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+if [[ "$RUN_C5M" == "1" ]]; then
+  if ! model_ready "$TEACHERS_DIR/c5_mild_unlearn"; then
+    GA_UNLEARN="$GRAD_ACCUM"
+    if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then
+      GA_UNLEARN=$((GRAD_ACCUM / UNLEARN_FSDP_NPROC))
+      if [[ $GA_UNLEARN -lt 1 ]]; then GA_UNLEARN=1; fi
+    fi
+    run_step unlearn_c5m \
+      "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$UNLEARN_FSDP_NPROC src/unlearn_teacher.py --model '$TEACHERS_DIR/c1' --forget-dataset '$DATASETS_DIR/target_train' --retain-dataset '$DATASETS_DIR/teacher_c2' --output '$TEACHERS_DIR/c5_mild_unlearn' $BF16_FLAG --optim $OPTIM --batch-size $PER_DEVICE_BATCH --grad-accum $GA_UNLEARN --epochs 1 --alpha $C5_ALPHA --beta $C5_BETA --kl-model '$C5_KL_MODEL' --kl-weight $C5_KL_WEIGHT --kl-device $C5_KL_DEVICE --kl-every $C5_KL_EVERY --early-stop-patience $C5_EARLY_PATIENCE --early-stop-min-steps $C5_EARLY_MIN_STEPS --early-stop-eval-every $C5_EARLY_EVAL_EVERY --fsdp"
   else
-    run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$DISTILL_GPU $(distill_cmd "$TEACHERS_DIR/c5_mild_unlearn" "$STUDENTS_DIR/c5_mild")"
+    log "SKIP unlearn_c5m (model exists)"
+    touch "$MARKERS/unlearn_c5m.done"
+  fi
+
+  if ! model_ready "$STUDENTS_DIR/c5_mild"; then
+    if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
+      run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c5_mild_unlearn' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c5_mild' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    else
+      run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$DISTILL_GPU $(distill_cmd "$TEACHERS_DIR/c5_mild_unlearn" "$STUDENTS_DIR/c5_mild")"
+    fi
+  else
+    log "SKIP distill_c5m (model exists)"
+    touch "$MARKERS/distill_c5m.done"
   fi
 else
-  log "SKIP distill_c5m (model exists)"
-  touch "$MARKERS/distill_c5m.done"
+  log "SKIP C5m (RUN_C5M=0)"
 fi
 
 run_step eval_mia_c1 \
@@ -289,20 +294,27 @@ run_step eval_mia_c3 \
 run_step eval_mia_c4_teacher \
   "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$TEACHERS_DIR/c1' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c4_teacher.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
 
-run_step eval_mia_c5m_student \
-  "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$STUDENTS_DIR/c5_mild' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c5m_student.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
+if [[ "$RUN_C5M" == "1" ]]; then
+  run_step eval_mia_c5m_student \
+    "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$STUDENTS_DIR/c5_mild' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c5m_student.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
 
-run_step eval_mia_c5m_teacher \
-  "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$TEACHERS_DIR/c5_mild_unlearn' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c5m_teacher.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
+  run_step eval_mia_c5m_teacher \
+    "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$TEACHERS_DIR/c5_mild_unlearn' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c5m_teacher.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
 
-run_step compute_stats \
-  "$PY src/compute_stats.py --c1 '$MIA_DIR/c1_student.json' --c2 '$MIA_DIR/c2_student.json' --c3 '$MIA_DIR/c3_student.json' --c4 '$MIA_DIR/c4_teacher.json' --c5 '$MIA_DIR/c5m_student.json' --out-dir '$MIA_DIR'"
+  run_step compute_stats \
+    "$PY src/compute_stats.py --c1 '$MIA_DIR/c1_student.json' --c2 '$MIA_DIR/c2_student.json' --c3 '$MIA_DIR/c3_student.json' --c4 '$MIA_DIR/c4_teacher.json' --c5 '$MIA_DIR/c5m_student.json' --out-dir '$MIA_DIR'"
+else
+  run_step compute_stats \
+    "$PY src/compute_stats.py --c1 '$MIA_DIR/c1_student.json' --c2 '$MIA_DIR/c2_student.json' --c3 '$MIA_DIR/c3_student.json' --c4 '$MIA_DIR/c4_teacher.json' --out-dir '$MIA_DIR'"
+fi
 
 if [[ "$RUN_UTILITY" == "1" ]]; then
   run_step utility_in_domain \
     "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_ppl.py --model '$TEACHERS_DIR/c1' --dataset '$DATASETS_DIR/distill' --output '$MIA_DIR/utility_c1_teacher.json' --batch-size 4 --max-samples 500 $BF16_FLAG"
-  run_step utility_c5m_teacher \
-    "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_ppl.py --model '$TEACHERS_DIR/c5_mild_unlearn' --dataset '$DATASETS_DIR/distill' --output '$MIA_DIR/utility_c5m_teacher.json' --batch-size 4 --max-samples 500 $BF16_FLAG"
+  if [[ "$RUN_C5M" == "1" ]]; then
+    run_step utility_c5m_teacher \
+      "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_ppl.py --model '$TEACHERS_DIR/c5_mild_unlearn' --dataset '$DATASETS_DIR/distill' --output '$MIA_DIR/utility_c5m_teacher.json' --batch-size 4 --max-samples 500 $BF16_FLAG"
+  fi
 fi
 
 log "Pipeline complete."

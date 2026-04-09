@@ -74,7 +74,7 @@ if [[ "$GPUS_PIPELINE" == "auto" || "$GPUS_C5" == "auto" || "$GPUS_C5R" == "auto
     TIME_PIPELINE="${TIME_PIPELINE/auto/24:00:00}"
     TIME_C5="${TIME_C5/auto/12:00:00}"
     TIME_C5R="${TIME_C5R/auto/12:00:00}"
-    ALLOW="${ALLOW/auto/}"
+    ALLOW="${ALLOW/auto/L}"
   fi
 fi
 

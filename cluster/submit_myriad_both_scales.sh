@@ -18,7 +18,7 @@ echo "Submitting GPT-Neo 1.3B run (Myriad)..."
   --model EleutherAI/gpt-neo-1.3B \
   --student "$STUDENT" \
   --run-tag gpt-neo-1.3b \
-  --allow "${ALLOW/auto/}"
+  --allow "${ALLOW/auto/L}"
 
 echo "Submitting GPT-Neo 2.7B run (Myriad)..."
 "$ROOT/cluster/submit_myriad_all.sh" \

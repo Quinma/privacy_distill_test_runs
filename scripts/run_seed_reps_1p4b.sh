@@ -23,6 +23,7 @@ PER_DEVICE_BATCH="${PER_DEVICE_BATCH:-2}"
 GRAD_ACCUM="${GRAD_ACCUM:-16}"
 OPTIM="${OPTIM:-adamw_8bit}"
 BF16_FLAG="--bf16"
+RUN_C5M="${RUN_C5M:-0}"
 
 # Unlearning hyperparams (C5m)
 C5_ALPHA="${C5_ALPHA:-0.1}"
@@ -310,7 +311,8 @@ PY
       $BF16_FLAG
   fi
 
-  echo "[seed-reps] C5m unlearning"
+  if [[ "$RUN_C5M" == "1" ]]; then
+    echo "[seed-reps] C5m unlearning"
   if model_ready "$TEACHERS_DIR/c5m_unlearn"; then
     echo "[seed-reps] Skip C5m unlearn (model exists)"
   else
@@ -376,6 +378,9 @@ PY
       $RESUME_ARG_DC5M \
       $BF16_FLAG
   fi
+  else
+    echo "[seed-reps] Skip C5m (RUN_C5M=0)"
+  fi
 
   echo "[seed-reps] Eval MIA (C1, C3, C5m student + C5m teacher)"
   CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/eval_mia.py" \
@@ -396,23 +401,25 @@ PY
     --batch-size 4 \
     $BF16_FLAG
 
-  CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/eval_mia.py" \
-    --model "$STUDENTS_DIR/c5m" \
-    --target-holdout "$DATASETS_DIR/eval_target_holdout" \
-    --nonmember "$DATASETS_DIR/eval_nonmember" \
-    --holdout-map "$DATASETS_DIR/holdout_map.json" \
-    --output "$MIA_DIR/c5m_student.json" \
-    --batch-size 4 \
-    $BF16_FLAG
+  if [[ "$RUN_C5M" == "1" ]]; then
+    CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/eval_mia.py" \
+      --model "$STUDENTS_DIR/c5m" \
+      --target-holdout "$DATASETS_DIR/eval_target_holdout" \
+      --nonmember "$DATASETS_DIR/eval_nonmember" \
+      --holdout-map "$DATASETS_DIR/holdout_map.json" \
+      --output "$MIA_DIR/c5m_student.json" \
+      --batch-size 4 \
+      $BF16_FLAG
 
-  CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/eval_mia.py" \
-    --model "$TEACHERS_DIR/c5m_unlearn" \
-    --target-holdout "$DATASETS_DIR/eval_target_holdout" \
-    --nonmember "$DATASETS_DIR/eval_nonmember" \
-    --holdout-map "$DATASETS_DIR/holdout_map.json" \
-    --output "$MIA_DIR/c5m_teacher.json" \
-    --batch-size 4 \
-    $BF16_FLAG
+    CUDA_VISIBLE_DEVICES="$DISTILL_GPU" $PY "$ROOT/src/eval_mia.py" \
+      --model "$TEACHERS_DIR/c5m_unlearn" \
+      --target-holdout "$DATASETS_DIR/eval_target_holdout" \
+      --nonmember "$DATASETS_DIR/eval_nonmember" \
+      --holdout-map "$DATASETS_DIR/holdout_map.json" \
+      --output "$MIA_DIR/c5m_teacher.json" \
+      --batch-size 4 \
+      $BF16_FLAG
+  fi
 
   echo "[seed-reps] Completed seed $SEED"
 done

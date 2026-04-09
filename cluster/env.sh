@@ -2,9 +2,15 @@
 set -euo pipefail
 
 # Edit these for your cluster environment.
-module purge
-module load ucl-stack/2025-12
-module load default-modules/2025-12
+if command -v module >/dev/null 2>&1; then
+  module purge
+  if module -t avail ucl-stack/2025-12 2>&1 | grep -q "ucl-stack/2025-12"; then
+    module load ucl-stack/2025-12
+    module load default-modules/2025-12
+  else
+    module load default-modules/2018
+  fi
+fi
 
 # Example modules (adjust as needed)
 # module load python/3.10.4
