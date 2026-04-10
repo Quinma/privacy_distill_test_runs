@@ -15,9 +15,8 @@ fi
 
 if [[ ! -d "$ROOT/.venv" ]]; then
   if "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1; then
-import venv\n
+import venv
 PY
-  then
     "$PYTHON_BIN" -m venv "$ROOT/.venv"
   else
     "$PYTHON_BIN" -m ensurepip --user >/dev/null 2>&1 || true
