@@ -6,11 +6,18 @@ source "$ROOT/cluster/env.sh"
 
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
+  if command -v python3.11 >/dev/null 2>&1; then
+    PYTHON_BIN="python3.11"
+  elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="python3"
   else
     PYTHON_BIN="python"
   fi
+fi
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "ERROR: $PYTHON_BIN not found. Load a python module (e.g., python/3.11.x) and retry." >&2
+  exit 1
 fi
 
 PY_VER="$("$PYTHON_BIN" - <<'PY'

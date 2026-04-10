@@ -25,10 +25,33 @@ if command -v module >/dev/null 2>&1; then
       module load "$py_mod"
     fi
   fi
+
+  # Prefer an explicit python module if requested; otherwise pick a recent one.
+  if [[ -n "${PYTHON_MODULE:-}" ]]; then
+    module load "$PYTHON_MODULE"
+  else
+    for cand in python/3.11.4 python/3.11 python/3.10.4 python/3.10 python/3.9 python/3.8; do
+      if module -t avail "$cand" 2>&1 | grep -q "$cand"; then
+        module load "$cand"
+        export PYTHON_MODULE="$cand"
+        break
+      fi
+    done
+  fi
 fi
 
 # Example modules (adjust as needed)
-# module load python/3.10.4
 # module load cuda/12.1
+
+# Choose a python binary for setup if not provided.
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  if command -v python3.11 >/dev/null 2>&1; then
+    export PYTHON_BIN="python3.11"
+  elif command -v python3 >/dev/null 2>&1; then
+    export PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    export PYTHON_BIN="python"
+  fi
+fi
 
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
