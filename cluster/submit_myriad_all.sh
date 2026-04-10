@@ -91,7 +91,7 @@ submit() {
   visible_gpus="$(seq -s, 0 $((gpus-1)))"
 
   local vars
-  vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,VISIBLE_GPUS=$visible_gpus"
+  vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,VISIBLE_GPUS=$visible_gpus,REPO_ROOT=$ROOT"
 
   local args=(
     -N "${RUN_TAG}_${name}"

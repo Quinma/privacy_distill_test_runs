@@ -6,7 +6,8 @@
 #$ -e logs/$JOB_NAME.$JOB_ID.err
 
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="${REPO_ROOT:-${SGE_O_WORKDIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
+cd "$ROOT"
 mkdir -p "$ROOT/logs"
 
 source "$ROOT/cluster/env.sh"
