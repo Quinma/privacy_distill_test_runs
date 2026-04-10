@@ -183,6 +183,11 @@ else
     "$PY src/build_target_train.py --dataset '$DATASET' --config '$CONFIG' ${REVISION:+--revision '$REVISION'} --split train --cik-map '$CIK_MAP' --tokenizer '$TOKENIZER' --form-types '$FORM_TYPES' --splits '$SPLITS_JSON' --holdout-map '$HOLDOUT_MAP' --max-length $MAX_LENGTH --max-tokens-per-company 0 --output '$DATASETS_DIR/target_train'"
 fi
 
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "Build-only mode complete (datasets prepared; training/eval skipped)."
+  exit 0
+fi
+
 BF16_FLAG=""
 if [[ "$BF16" == "1" ]]; then BF16_FLAG="--bf16"; fi
 
