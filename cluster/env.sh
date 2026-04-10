@@ -2,6 +2,17 @@
 set -euo pipefail
 
 # Edit these for your cluster environment.
+# Ensure the module function exists in non-interactive shells.
+if ! command -v module >/dev/null 2>&1; then
+  for init in /etc/profile.d/modules.sh /usr/share/Modules/init/bash /shared/ucl/apps/modules/5.3.1/init/bash; do
+    if [[ -f "$init" ]]; then
+      # shellcheck source=/dev/null
+      source "$init"
+      break
+    fi
+  done
+fi
+
 if command -v module >/dev/null 2>&1; then
   module purge
   if module -t avail ucl-stack/2025-12 2>&1 | grep -q "ucl-stack/2025-12"; then
