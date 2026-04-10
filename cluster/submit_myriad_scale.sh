@@ -12,6 +12,7 @@ GPUS="auto"
 CPUS="8"
 MEM_PER_CORE="8G"
 ALLOW="auto"
+EMAIL="${EMAIL:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -23,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --cpus) CPUS="$2"; shift 2;;
     --mem-per-core) MEM_PER_CORE="$2"; shift 2;;
     --allow) ALLOW="$2"; shift 2;;
+    --email) EMAIL="$2"; shift 2;;
     *) echo "Unknown arg: $1"; exit 1;;
   esac
  done
@@ -59,6 +61,9 @@ QSUB_ARGS=(
 
 if [[ -n "$ALLOW" ]]; then
   QSUB_ARGS+=( -ac "allow=$ALLOW" )
+fi
+if [[ -n "$EMAIL" ]]; then
+  QSUB_ARGS+=( -m bea -M "$EMAIL" )
 fi
 
 qsub "${QSUB_ARGS[@]}" "$ROOT/cluster/qsub_run.sh" | awk '{print $3}'

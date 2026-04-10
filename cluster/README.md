@@ -109,6 +109,7 @@ Both scales:
 Notes:
 - `--mem-per-core` is per-core memory (SGE), default `8G`.
 - `--allow` can be used to target GPU types (e.g., `L` for A100 40G nodes). Myriad scripts default to `L` to avoid V100 OOMs.
+- `--email` enables SGE notifications (`-m bea`) on begin/end/abort.
 - C5m is disabled by default. Set `RUN_C5M=1` to enable it.
 
 ## 3) Monitor jobs (Myriad)

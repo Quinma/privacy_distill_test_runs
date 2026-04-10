@@ -23,6 +23,7 @@ GPUS_SEEDS="1"
 CPUS="8"
 MEM_PER_CORE="8G"
 ALLOW="auto"
+EMAIL="${EMAIL:-}"
 
 RUN_C5="1"
 RUN_C5R="1"
@@ -37,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --cpus) CPUS="$2"; shift 2;;
     --mem-per-core) MEM_PER_CORE="$2"; shift 2;;
     --allow) ALLOW="$2"; shift 2;;
+    --email) EMAIL="$2"; shift 2;;
     --time-pipeline) TIME_PIPELINE="$2"; shift 2;;
     --time-c5) TIME_C5="$2"; shift 2;;
     --time-c5r) TIME_C5R="$2"; shift 2;;
@@ -102,6 +104,9 @@ submit() {
 
   if [[ -n "$ALLOW" ]]; then
     args+=( -ac "allow=$ALLOW" )
+  fi
+  if [[ -n "$EMAIL" ]]; then
+    args+=( -m bea -M "$EMAIL" )
   fi
 
   if [[ -n "$dep" ]]; then
