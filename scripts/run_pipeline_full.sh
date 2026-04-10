@@ -55,6 +55,7 @@ RUN_GATE="${RUN_GATE:-0}"
 RUN_UTILITY="${RUN_UTILITY:-0}"
 REUSE_DATASETS="${REUSE_DATASETS:-0}"
 RUN_C5M="${RUN_C5M:-0}"
+SKIP_TRAIN="${SKIP_TRAIN:-0}"
 
 FSDP_NPROC="${FSDP_NPROC:-1}"
 UNLEARN_FSDP_NPROC="${UNLEARN_FSDP_NPROC:-1}"
@@ -188,7 +189,10 @@ distill_cmd() {
   fi
 }
 
-if ! model_ready "$TEACHERS_DIR/c1"; then
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "SKIP train_c1 (SKIP_TRAIN=1)"
+  touch "$MARKERS/train_c1.done"
+elif ! model_ready "$TEACHERS_DIR/c1"; then
   if [[ "$TRAIN_DDP_NPROC" -gt 1 ]]; then
     run_step train_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c1' --output '$TEACHERS_DIR/c1' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
   else
@@ -199,7 +203,10 @@ else
   touch "$MARKERS/train_c1.done"
 fi
 
-if ! model_ready "$TEACHERS_DIR/c2"; then
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "SKIP train_c2 (SKIP_TRAIN=1)"
+  touch "$MARKERS/train_c2.done"
+elif ! model_ready "$TEACHERS_DIR/c2"; then
   if [[ "$TRAIN_DDP_NPROC" -gt 1 ]]; then
     run_step train_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c2' --output '$TEACHERS_DIR/c2' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
   else
@@ -210,7 +217,10 @@ else
   touch "$MARKERS/train_c2.done"
 fi
 
-if ! model_ready "$TEACHERS_DIR/c3"; then
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "SKIP train_c3 (SKIP_TRAIN=1)"
+  touch "$MARKERS/train_c3.done"
+elif ! model_ready "$TEACHERS_DIR/c3"; then
   if [[ "$TRAIN_DDP_NPROC" -gt 1 ]]; then
     run_step train_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c3' --output '$TEACHERS_DIR/c3' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
   else
@@ -221,7 +231,10 @@ else
   touch "$MARKERS/train_c3.done"
 fi
 
-if ! model_ready "$STUDENTS_DIR/c1"; then
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "SKIP distill_c1 (SKIP_TRAIN=1)"
+  touch "$MARKERS/distill_c1.done"
+elif ! model_ready "$STUDENTS_DIR/c1"; then
   if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
     run_step distill_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c1' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c1' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
   else
@@ -232,7 +245,10 @@ else
   touch "$MARKERS/distill_c1.done"
 fi
 
-if ! model_ready "$STUDENTS_DIR/c2"; then
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "SKIP distill_c2 (SKIP_TRAIN=1)"
+  touch "$MARKERS/distill_c2.done"
+elif ! model_ready "$STUDENTS_DIR/c2"; then
   if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
     run_step distill_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c2' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c2' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
   else
@@ -243,7 +259,10 @@ else
   touch "$MARKERS/distill_c2.done"
 fi
 
-if ! model_ready "$STUDENTS_DIR/c3"; then
+if [[ "$SKIP_TRAIN" == "1" ]]; then
+  log "SKIP distill_c3 (SKIP_TRAIN=1)"
+  touch "$MARKERS/distill_c3.done"
+elif ! model_ready "$STUDENTS_DIR/c3"; then
   if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
     run_step distill_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c3' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c3' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
   else
@@ -254,7 +273,7 @@ else
   touch "$MARKERS/distill_c3.done"
 fi
 
-if [[ "$RUN_C5M" == "1" ]]; then
+if [[ "$RUN_C5M" == "1" && "$SKIP_TRAIN" != "1" ]]; then
   if ! model_ready "$TEACHERS_DIR/c5_mild_unlearn"; then
     GA_UNLEARN="$GRAD_ACCUM"
     if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then
@@ -294,7 +313,7 @@ run_step eval_mia_c3 \
 run_step eval_mia_c4_teacher \
   "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$TEACHERS_DIR/c1' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c4_teacher.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
 
-if [[ "$RUN_C5M" == "1" ]]; then
+if [[ "$RUN_C5M" == "1" && "$SKIP_TRAIN" != "1" ]]; then
   run_step eval_mia_c5m_student \
     "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_mia.py --model '$STUDENTS_DIR/c5_mild' --target-holdout '$DATASETS_DIR/eval_target_holdout' --nonmember '$DATASETS_DIR/eval_nonmember' --holdout-map '$HOLDOUT_MAP' --output '$MIA_DIR/c5m_student.json' --batch-size 4 --max-length $MAX_LENGTH $BF16_FLAG"
 
@@ -308,7 +327,7 @@ else
     "$PY src/compute_stats.py --c1 '$MIA_DIR/c1_student.json' --c2 '$MIA_DIR/c2_student.json' --c3 '$MIA_DIR/c3_student.json' --c4 '$MIA_DIR/c4_teacher.json' --out-dir '$MIA_DIR'"
 fi
 
-if [[ "$RUN_UTILITY" == "1" ]]; then
+if [[ "$RUN_UTILITY" == "1" && "$SKIP_TRAIN" != "1" ]]; then
   run_step utility_in_domain \
     "CUDA_VISIBLE_DEVICES=$EVAL_GPU $PY src/eval_ppl.py --model '$TEACHERS_DIR/c1' --dataset '$DATASETS_DIR/distill' --output '$MIA_DIR/utility_c1_teacher.json' --batch-size 4 --max-samples 500 $BF16_FLAG"
   if [[ "$RUN_C5M" == "1" ]]; then
