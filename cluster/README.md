@@ -112,6 +112,19 @@ Notes:
 - `--email` enables SGE notifications (`-m bea`) on begin/end/abort.
 - C5m is disabled by default. Set `RUN_C5M=1` to enable it.
 
+## Build-only then pipeline (Myriad)
+
+To avoid hitting wallclock limits on dataset build, submit a build-only job
+and automatically hold the pipeline on its completion:
+
+```bash
+./cluster/submit_myriad_build_then_all.sh --model EleutherAI/gpt-neo-1.3B --student EleutherAI/gpt-neo-125M --allow L --email m.quinlan@ucl.ac.uk
+```
+
+This submits:
+- a build-only job (datasets only), then
+- the full pipeline with `REUSE_DATASETS=1`, held on the build job.
+
 ## 3) Monitor jobs (Myriad)
 
 ```bash

@@ -24,6 +24,8 @@ CPUS="8"
 MEM_PER_CORE="8G"
 ALLOW="auto"
 EMAIL="${EMAIL:-}"
+HOLD_JID=""
+REUSE_DATASETS=""
 
 RUN_C5="1"
 RUN_C5R="1"
@@ -39,6 +41,8 @@ while [[ $# -gt 0 ]]; do
     --mem-per-core) MEM_PER_CORE="$2"; shift 2;;
     --allow) ALLOW="$2"; shift 2;;
     --email) EMAIL="$2"; shift 2;;
+    --hold-jid) HOLD_JID="$2"; shift 2;;
+    --reuse-datasets) REUSE_DATASETS="$2"; shift 2;;
     --time-pipeline) TIME_PIPELINE="$2"; shift 2;;
     --time-c5) TIME_C5="$2"; shift 2;;
     --time-c5r) TIME_C5R="$2"; shift 2;;
@@ -92,6 +96,9 @@ submit() {
 
   local vars
   vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,VISIBLE_GPUS=$visible_gpus,REPO_ROOT=$ROOT"
+  if [[ -n "$REUSE_DATASETS" ]]; then
+    vars="$vars,REUSE_DATASETS=$REUSE_DATASETS"
+  fi
 
   local args=(
     -N "${RUN_TAG}_${name}"
@@ -116,7 +123,7 @@ submit() {
   qsub "${args[@]}" "$ROOT/cluster/qsub_run.sh" | awk '{print $3}'
 }
 
-pipeline_id=$(submit "pipeline" "pipeline_full" "$GPUS_PIPELINE" "$TIME_PIPELINE")
+pipeline_id=$(submit "pipeline" "pipeline_full" "$GPUS_PIPELINE" "$TIME_PIPELINE" "$HOLD_JID")
 echo "Submitted pipeline_full: $pipeline_id"
 
 if [[ "$RUN_C5" == "1" ]]; then
