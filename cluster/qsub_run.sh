@@ -9,6 +9,7 @@ set -euo pipefail
 ROOT="${REPO_ROOT:-${SGE_O_WORKDIR:-$(cd "$(dirname "$0")/.." && pwd)}}"
 cd "$ROOT"
 mkdir -p "$ROOT/logs"
+echo "[qsub_run] ROOT=$ROOT PWD=$(pwd) HOST=$(hostname)"
 
 source "$ROOT/cluster/env.sh"
 if [[ -f "$ROOT/.venv/bin/activate" ]]; then
