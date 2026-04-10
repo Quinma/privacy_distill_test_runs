@@ -9,6 +9,13 @@ if command -v module >/dev/null 2>&1; then
     module load default-modules/2025-12
   else
     module load default-modules/2018
+    if module -t avail python/3.10.4 2>&1 | grep -q "python/3.10.4"; then
+      module load python/3.10.4
+    elif module -t avail python/3.9.0 2>&1 | grep -q "python/3.9.0"; then
+      module load python/3.9.0
+    elif module -t avail python/3.8.0 2>&1 | grep -q "python/3.8.0"; then
+      module load python/3.8.0
+    fi
   fi
 fi
 
