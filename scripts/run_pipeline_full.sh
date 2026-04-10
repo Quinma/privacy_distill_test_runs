@@ -97,6 +97,12 @@ if ! "$PY" -V >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -n "${HF_TOKEN:-}" && -z "${HUGGINGFACE_HUB_TOKEN:-}" ]]; then
+  export HUGGINGFACE_HUB_TOKEN="$HF_TOKEN"
+elif [[ -n "${HUGGINGFACE_HUB_TOKEN:-}" && -z "${HF_TOKEN:-}" ]]; then
+  export HF_TOKEN="$HUGGINGFACE_HUB_TOKEN"
+fi
+
 if [[ -z "${HF_TOKEN:-}" && -z "${HUGGINGFACE_HUB_TOKEN:-}" ]]; then
   log "WARN: HF token not set; gated/private datasets may fail to download"
 fi
