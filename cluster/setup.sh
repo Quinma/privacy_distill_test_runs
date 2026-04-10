@@ -40,8 +40,8 @@ fi
 
 source "$ROOT/.venv/bin/activate"
 python -m pip install --upgrade "pip>=23.1" "setuptools>=68" "wheel>=0.41"
-# Ensure numpy installs from a wheel (avoid local compile with system compilers)
-python -m pip install --only-binary=:all: "numpy>=1.24.0"
-pip install -r "$ROOT/requirements.txt"
+# Ensure heavy deps install from wheels (avoid local compile with system compilers)
+python -m pip install --only-binary=:all: "numpy>=1.24.0" "scikit-learn>=1.3.0"
+python -m pip install --only-binary=:all: -r "$ROOT/requirements.txt"
 
 echo "Venv ready at $ROOT/.venv"
