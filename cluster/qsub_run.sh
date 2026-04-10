@@ -16,6 +16,17 @@ if [[ -f "$ROOT/.venv/bin/activate" ]]; then
   source "$ROOT/.venv/bin/activate"
 fi
 
+if command -v module >/dev/null 2>&1; then
+  module list 2>&1 | sed 's/^/[qsub_run] /'
+fi
+
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  if ! "$ROOT/.venv/bin/python" -V >/dev/null 2>&1; then
+    echo "[qsub_run] ERROR: venv python failed to run. Ensure python module is loaded and re-run cluster/setup.sh." >&2
+    exit 127
+  fi
+fi
+
 if [[ -n "${RUN_CMD:-}" ]]; then
   bash -lc "$RUN_CMD"
 else

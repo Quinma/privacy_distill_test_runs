@@ -79,6 +79,28 @@ mkdir -p "$LOG_DIR" "$MARKERS" "$DATASETS_DIR" "$TEACHERS_DIR" "$STUDENTS_DIR" "
 
 log() { echo "[$(ts)] $*" | tee -a "$RUN_LOG"; }
 
+require_file() {
+  local path="$1"
+  local label="$2"
+  if [[ ! -f "$path" ]]; then
+    log "ERROR: missing $label at $path"
+    exit 1
+  fi
+}
+
+if [[ ! -x "$PY" ]]; then
+  log "ERROR: python not found at $PY (run setup.sh?)"
+  exit 1
+fi
+if ! "$PY" -V >/dev/null 2>&1; then
+  log "ERROR: python failed to run at $PY (check module/venv)"
+  exit 1
+fi
+
+if [[ -z "${HF_TOKEN:-}" && -z "${HUGGINGFACE_HUB_TOKEN:-}" ]]; then
+  log "WARN: HF token not set; gated/private datasets may fail to download"
+fi
+
 run_step() {
   local name="$1"; shift
   local log_file="$LOG_DIR/${name}.log"
@@ -142,6 +164,8 @@ if [[ "$REUSE_DATASETS" == "1" && -d "$DATASETS_DIR" ]]; then
   log "SKIP build_splits (REUSE_DATASETS=1 and dataset dir exists)"
   touch "$MARKERS/build_splits.done"
 else
+  require_file "$CIK_MAP" "CIK_MAP"
+  require_file "$STATS_PATH" "STATS_PATH"
   run_step_retry build_splits 2 \
     "rm -rf '$DATASETS_DIR' && $PY src/data_prep.py build --dataset '$DATASET' --config '$CONFIG' ${REVISION:+--revision '$REVISION'} --split train --cik-map '$CIK_MAP' --tokenizer '$TOKENIZER' --form-types '$FORM_TYPES' --stats-path '$STATS_PATH' --output-dir '$DATASETS_DIR' --top-n $TOP_N --n-targets $N_TARGETS --holdout-max $HOLDOUT_MAX --holdout-frac $HOLDOUT_FRAC --background-tokens $BACKGROUND_TOKENS --nonmember-tokens $NONMEMBER_TOKENS --max-length $MAX_LENGTH --max-tokens-per-company $MAX_TOKENS_PER_COMPANY --sample-buffer $SAMPLE_BUFFER"
 fi
@@ -150,6 +174,11 @@ if [[ "$REUSE_DATASETS" == "1" && -d "$DATASETS_DIR/target_train" ]]; then
   log "SKIP build_target_train (REUSE_DATASETS=1 and target_train exists)"
   touch "$MARKERS/build_target_train.done"
 else
+  require_file "$CIK_MAP" "CIK_MAP"
+  if [[ "$REUSE_DATASETS" == "1" ]]; then
+    require_file "$SPLITS_JSON" "splits.json"
+    require_file "$HOLDOUT_MAP" "holdout_map.json"
+  fi
   run_step_retry build_target_train 2 \
     "$PY src/build_target_train.py --dataset '$DATASET' --config '$CONFIG' ${REVISION:+--revision '$REVISION'} --split train --cik-map '$CIK_MAP' --tokenizer '$TOKENIZER' --form-types '$FORM_TYPES' --splits '$SPLITS_JSON' --holdout-map '$HOLDOUT_MAP' --max-length $MAX_LENGTH --max-tokens-per-company 0 --output '$DATASETS_DIR/target_train'"
 fi

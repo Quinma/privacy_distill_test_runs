@@ -65,6 +65,14 @@ if [[ -z "$RUN_TAG" ]]; then
   RUN_TAG="$(echo "$MODEL" | sed 's#.*/##')"
 fi
 
+if [[ -n "$REUSE_DATASETS" ]]; then
+  ds_dir="$ROOT/data/datasets/$RUN_TAG"
+  if [[ ! -d "$ds_dir" ]]; then
+    echo "ERROR: --reuse-datasets set but dataset dir not found: $ds_dir" >&2
+    exit 1
+  fi
+fi
+
 if [[ "$GPUS_PIPELINE" == "auto" || "$GPUS_C5" == "auto" || "$GPUS_C5R" == "auto" || "$TIME_PIPELINE" == "auto" || "$TIME_C5" == "auto" || "$TIME_C5R" == "auto" || "$ALLOW" == "auto" ]]; then
   if [[ "$MODEL" == *"2.7B"* ]]; then
     GPUS_PIPELINE="${GPUS_PIPELINE/auto/2}"
