@@ -105,6 +105,7 @@ def main():
     p.add_argument("--c3", required=True)
     p.add_argument("--c4", required=True)
     p.add_argument("--c5", default=None)
+    p.add_argument("--c5r", default=None)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--boot", type=int, default=2000)
     p.add_argument("--perm", type=int, default=20000)
@@ -120,6 +121,8 @@ def main():
     }
     if args.c5:
         conds["C5"] = load_condition(args.c5)
+    if args.c5r:
+        conds["C5r"] = load_condition(args.c5r)
 
     # Bootstrap CIs per condition (AUROC + mean loss_ratio)
     stats = {}
@@ -158,6 +161,10 @@ def main():
     }
     if "C5" in conds:
         paired["C5_vs_C3"] = paired_stats("C5", "C3")
+    if "C5r" in conds:
+        paired["C5r_vs_C3"] = paired_stats("C5r", "C3")
+    if "C5" in conds and "C5r" in conds:
+        paired["C5_vs_C5r"] = paired_stats("C5", "C5r")
 
     out = {
         "bootstrap": stats,

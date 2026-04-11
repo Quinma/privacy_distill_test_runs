@@ -18,6 +18,7 @@ RETAIN_DATA="${RETAIN_DATA:-$DATASETS_DIR/teacher_c2}"
 
 UNLEARN_OUT="${UNLEARN_OUT:-$TEACHERS_DIR/c5_unlearn}"
 STUDENT_OUT="${STUDENT_OUT:-$STUDENTS_DIR/c5}"
+HOLDOUT_UTILITY_DATASET="${HOLDOUT_UTILITY_DATASET:-}"
 
 MAX_LENGTH="${MAX_LENGTH:-512}"
 BF16="${BF16:-1}"
@@ -51,7 +52,21 @@ fi
 
 mkdir -p "$TEACHERS_DIR" "$STUDENTS_DIR" "$MIA_DIR"
 
+if [[ -z "$HOLDOUT_UTILITY_DATASET" ]]; then
+  if [[ -d "$DATASETS_DIR/eval_target_holdout_tok" ]]; then
+    HOLDOUT_UTILITY_DATASET="$DATASETS_DIR/eval_target_holdout_tok"
+  else
+    HOLDOUT_UTILITY_DATASET="$DATASETS_DIR/eval_target_holdout"
+  fi
+fi
+
+if [[ ! -d "$HOLDOUT_UTILITY_DATASET" ]]; then
+  echo "[c5] ERROR: missing holdout utility dataset at $HOLDOUT_UTILITY_DATASET" >&2
+  exit 1
+fi
+
 echo "[c5] Aggressive unlearning (alpha=$ALPHA beta=$BETA) on $MODEL"
+echo "[c5] Holdout utility dataset: $HOLDOUT_UTILITY_DATASET"
 if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then
   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS" \
     $PY -m torch.distributed.run --nproc_per_node="$UNLEARN_FSDP_NPROC" "$ROOT/src/unlearn_teacher.py" \
@@ -163,7 +178,7 @@ CUDA_VISIBLE_DEVICES="$EVAL_GPU" \
 CUDA_VISIBLE_DEVICES="$EVAL_GPU" \
   $PY "$ROOT/src/eval_ppl.py" \
     --model "$STUDENT_OUT" \
-    --dataset "$DATASETS_DIR/eval_target_holdout_tok" \
+    --dataset "$HOLDOUT_UTILITY_DATASET" \
     --output "$MIA_DIR/utility_c5_student_holdout.json" \
     --batch-size 4 \
     --max-samples 0 \
@@ -172,7 +187,7 @@ CUDA_VISIBLE_DEVICES="$EVAL_GPU" \
 CUDA_VISIBLE_DEVICES="$EVAL_GPU" \
   $PY "$ROOT/src/eval_ppl.py" \
     --model "$UNLEARN_OUT" \
-    --dataset "$DATASETS_DIR/eval_target_holdout_tok" \
+    --dataset "$HOLDOUT_UTILITY_DATASET" \
     --output "$MIA_DIR/utility_c5_teacher_holdout.json" \
     --batch-size 4 \
     --max-samples 0 \
