@@ -13,12 +13,14 @@ CPUS="8"
 MEM_PER_CORE="8G"
 ALLOW="auto"
 EMAIL="${EMAIL:-}"
+REUSE_DATASETS=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --model) MODEL="$2"; shift 2;;
     --student) STUDENT="$2"; shift 2;;
     --run-tag) RUN_TAG="$2"; shift 2;;
+    --reuse-datasets) REUSE_DATASETS="$2"; shift 2;;
     --time) TIME="$2"; shift 2;;
     --gpus) GPUS="$2"; shift 2;;
     --cpus) CPUS="$2"; shift 2;;
@@ -31,6 +33,14 @@ while [[ $# -gt 0 ]]; do
 
 if [[ -z "$RUN_TAG" ]]; then
   RUN_TAG="$(echo "$MODEL" | sed 's#.*/##')"
+fi
+
+if [[ -n "$REUSE_DATASETS" ]]; then
+  ds_dir="$ROOT/data/datasets/$RUN_TAG"
+  if [[ ! -d "$ds_dir" ]]; then
+    echo "ERROR: --reuse-datasets set but dataset dir not found: $ds_dir" >&2
+    exit 1
+  fi
 fi
 
 if [[ "$GPUS" == "auto" || "$TIME" == "auto" || "$ALLOW" == "auto" ]]; then
@@ -49,6 +59,9 @@ VISIBLE_GPUS="$(seq -s, 0 $((GPUS-1)))"
 
 JOB_NAME="${RUN_TAG}_pipeline"
 VARS="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=pipeline_full,TRAIN_DDP_NPROC=$GPUS,DISTILL_DDP_NPROC=$GPUS,UNLEARN_FSDP_NPROC=$GPUS,VISIBLE_GPUS=$VISIBLE_GPUS,REPO_ROOT=$ROOT"
+if [[ -n "$REUSE_DATASETS" ]]; then
+  VARS="$VARS,REUSE_DATASETS=$REUSE_DATASETS"
+fi
 
 QSUB_ARGS=(
   -N "$JOB_NAME"
