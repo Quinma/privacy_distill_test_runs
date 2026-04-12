@@ -88,12 +88,28 @@ if "$PY" -c "import bitsandbytes" >/dev/null 2>&1; then
   BNB_AVAILABLE=1
 fi
 
+OPTIM_TORCH_FALLBACK="$("$PY" - <<'PY'
+try:
+    from transformers.training_args import OptimizerNames
+except Exception:
+    print("adamw_torch")
+    raise SystemExit(0)
+names = {item.value for item in OptimizerNames}
+for candidate in ("adamw_torch", "adamw"):
+    if candidate in names:
+        print(candidate)
+        break
+else:
+    print("adamw_torch")
+PY
+)"
+
 fallback_8bit_optim() {
   local var_name="$1"
   local current="${!var_name:-}"
   if [[ "$current" == "adamw_8bit" && "$BNB_AVAILABLE" != "1" ]]; then
-    echo "[c5] WARN: bitsandbytes not available; falling back from $var_name=adamw_8bit to adamw" >&2
-    printf -v "$var_name" '%s' 'adamw'
+    echo "[c5] WARN: bitsandbytes not available; falling back from $var_name=adamw_8bit to $OPTIM_TORCH_FALLBACK" >&2
+    printf -v "$var_name" '%s' "$OPTIM_TORCH_FALLBACK"
   fi
 }
 
