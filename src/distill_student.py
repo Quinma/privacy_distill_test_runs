@@ -4,6 +4,7 @@ import os
 import datasets
 import torch
 import torch.nn.functional as F
+from torch.distributed.elastic.multiprocessing.errors import record
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           DataCollatorForLanguageModeling, Trainer,
                           TrainingArguments)
@@ -102,6 +103,7 @@ def build_parser():
     return p
 
 
+@record
 def main():
     args = build_parser().parse_args()
     os.makedirs(args.output, exist_ok=True)

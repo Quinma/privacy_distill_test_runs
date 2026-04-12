@@ -7,6 +7,7 @@ from typing import Dict
 
 import datasets
 import torch
+from torch.distributed.elastic.multiprocessing.errors import record
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup, DataCollatorWithPadding
@@ -48,6 +49,7 @@ def _cycle(dl):
             yield x
 
 
+@record
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True)
