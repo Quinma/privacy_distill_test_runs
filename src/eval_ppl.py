@@ -18,6 +18,8 @@ def build_parser():
     p.add_argument("--output", required=True)
     p.add_argument("--batch-size", type=int, default=4)
     p.add_argument("--max-samples", type=int, default=0, help="If >0, sample this many examples")
+    p.add_argument("--max-length", type=int, default=512)
+    p.add_argument("--text-column", default="text")
     p.add_argument("--seed", type=int, default=13)
     p.add_argument("--device", default="cuda")
     p.add_argument("--bf16", action="store_true")
@@ -39,6 +41,28 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.model_max_length = args.max_length
+
+    if "input_ids" not in ds.column_names:
+        if args.text_column not in ds.column_names:
+            raise ValueError(
+                f"Dataset at {args.dataset} is not tokenized and lacks text column '{args.text_column}'. "
+                f"Columns: {ds.column_names}"
+            )
+
+        def tokenize_batch(batch):
+            return tokenizer(
+                batch[args.text_column],
+                truncation=True,
+                max_length=args.max_length,
+            )
+
+        ds = ds.map(
+            tokenize_batch,
+            batched=True,
+            remove_columns=ds.column_names,
+            desc="Tokenizing raw-text dataset for eval_ppl",
+        )
 
     model = AutoModelForCausalLM.from_pretrained(args.model)
     if args.bf16:
