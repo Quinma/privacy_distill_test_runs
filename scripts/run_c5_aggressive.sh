@@ -83,6 +83,23 @@ if [[ ! -d "$HOLDOUT_UTILITY_DATASET" ]]; then
   exit 1
 fi
 
+BNB_AVAILABLE=0
+if "$PY" -c "import bitsandbytes" >/dev/null 2>&1; then
+  BNB_AVAILABLE=1
+fi
+
+fallback_8bit_optim() {
+  local var_name="$1"
+  local current="${!var_name:-}"
+  if [[ "$current" == "adamw_8bit" && "$BNB_AVAILABLE" != "1" ]]; then
+    echo "[c5] WARN: bitsandbytes not available; falling back from $var_name=adamw_8bit to adamw" >&2
+    printf -v "$var_name" '%s' 'adamw'
+  fi
+}
+
+fallback_8bit_optim UNLEARN_OPTIM
+fallback_8bit_optim DISTILL_OPTIM
+
 echo "[c5] Aggressive unlearning (alpha=$ALPHA beta=$BETA) on $MODEL"
 echo "[c5] Holdout utility dataset: $HOLDOUT_UTILITY_DATASET"
 if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then

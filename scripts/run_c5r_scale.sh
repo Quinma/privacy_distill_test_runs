@@ -66,6 +66,16 @@ normalize_visible_gpus() {
 
 VISIBLE_GPUS="$(normalize_visible_gpus "$NPROC")"
 
+BNB_AVAILABLE=0
+if "$PY" -c "import bitsandbytes" >/dev/null 2>&1; then
+  BNB_AVAILABLE=1
+fi
+
+if [[ "$DISTILL_OPTIM" == "adamw_8bit" && "$BNB_AVAILABLE" != "1" ]]; then
+  echo "[c5r] WARN: bitsandbytes not available; falling back from DISTILL_OPTIM=adamw_8bit to adamw" >&2
+  DISTILL_OPTIM="adamw"
+fi
+
 echo "[c5r] Building random forget dataset..."
 $PY "$ROOT/src/build_random_forget.py" \
   --dataset "$DATASET" \

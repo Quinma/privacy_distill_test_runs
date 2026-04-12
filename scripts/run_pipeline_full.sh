@@ -116,6 +116,22 @@ if ! "$PY" -V >/dev/null 2>&1; then
   exit 1
 fi
 
+BNB_AVAILABLE=0
+if "$PY" -c "import bitsandbytes" >/dev/null 2>&1; then
+  BNB_AVAILABLE=1
+fi
+
+fallback_8bit_optim() {
+  local var_name="$1"
+  local current="${!var_name:-}"
+  if [[ "$current" == "adamw_8bit" && "$BNB_AVAILABLE" != "1" ]]; then
+    log "WARN: bitsandbytes not available; falling back from $var_name=adamw_8bit to adamw"
+    printf -v "$var_name" '%s' 'adamw'
+  fi
+}
+
+fallback_8bit_optim OPTIM
+
 if [[ -n "${HF_TOKEN:-}" && -z "${HUGGINGFACE_HUB_TOKEN:-}" ]]; then
   export HUGGINGFACE_HUB_TOKEN="$HF_TOKEN"
 elif [[ -n "${HUGGINGFACE_HUB_TOKEN:-}" && -z "${HF_TOKEN:-}" ]]; then
