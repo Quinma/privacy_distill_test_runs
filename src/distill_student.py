@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import os
 
 import datasets
@@ -144,17 +145,23 @@ def main():
         dataloader_pin_memory=args.dataloader_pin_memory,
     )
 
-    trainer = DistillTrainer(
-        teacher=teacher,
-        temperature=args.temperature,
-        alpha=args.alpha,
-        teacher_device=args.teacher_device,
-        model=student,
-        args=train_args,
-        train_dataset=ds,
-        data_collator=data_collator,
-        tokenizer=tokenizer,
-    )
+    trainer_kwargs = {
+        "teacher": teacher,
+        "temperature": args.temperature,
+        "alpha": args.alpha,
+        "teacher_device": args.teacher_device,
+        "model": student,
+        "args": train_args,
+        "train_dataset": ds,
+        "data_collator": data_collator,
+    }
+    trainer_params = inspect.signature(DistillTrainer.__init__).parameters
+    if "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    elif "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+
+    trainer = DistillTrainer(**trainer_kwargs)
 
     trainer.train(resume_from_checkpoint=args.resume)
     trainer.save_model(args.output)

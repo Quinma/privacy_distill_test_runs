@@ -97,13 +97,19 @@ def main():
 
     train_args = TrainingArguments(**train_kwargs)
 
-    trainer = Trainer(
-        model=model,
-        args=train_args,
-        train_dataset=ds,
-        data_collator=data_collator,
-        tokenizer=tokenizer,
-    )
+    trainer_kwargs = {
+        "model": model,
+        "args": train_args,
+        "train_dataset": ds,
+        "data_collator": data_collator,
+    }
+    trainer_params = inspect.signature(Trainer.__init__).parameters
+    if "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    elif "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+
+    trainer = Trainer(**trainer_kwargs)
 
     trainer.train(resume_from_checkpoint=args.resume)
     trainer.save_model(args.output)
