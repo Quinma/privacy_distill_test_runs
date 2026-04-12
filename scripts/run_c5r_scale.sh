@@ -50,6 +50,22 @@ CLEAN="${CLEAN:-0}"
 
 mkdir -p "$TEACHERS_DIR" "$STUDENTS_DIR" "$MIA_DIR"
 
+normalize_visible_gpus() {
+  local required="$1"
+  local current="${VISIBLE_GPUS:-}"
+  local count=0
+  if [[ -n "$current" ]]; then
+    count="$(awk -F',' '{print NF}' <<< "$current")"
+  fi
+  if [[ -z "$current" || "$count" -lt "$required" ]]; then
+    seq -s, 0 $((required-1))
+  else
+    echo "$current"
+  fi
+}
+
+VISIBLE_GPUS="$(normalize_visible_gpus "$NPROC")"
+
 echo "[c5r] Building random forget dataset..."
 $PY "$ROOT/src/build_random_forget.py" \
   --dataset "$DATASET" \

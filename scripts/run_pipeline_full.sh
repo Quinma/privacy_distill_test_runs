@@ -79,6 +79,20 @@ mkdir -p "$LOG_DIR" "$MARKERS" "$DATASETS_DIR" "$TEACHERS_DIR" "$STUDENTS_DIR" "
 
 log() { echo "[$(ts)] $*" | tee -a "$RUN_LOG"; }
 
+normalize_visible_gpus() {
+  local required="$1"
+  local current="${VISIBLE_GPUS:-}"
+  local count=0
+  if [[ -n "$current" ]]; then
+    count="$(awk -F',' '{print NF}' <<< "$current")"
+  fi
+  if [[ -z "$current" || "$count" -lt "$required" ]]; then
+    seq -s, 0 $((required-1))
+  else
+    echo "$current"
+  fi
+}
+
 require_file() {
   local path="$1"
   local label="$2"
@@ -87,6 +101,11 @@ require_file() {
     exit 1
   fi
 }
+
+MAX_DDP_NPROC="$TRAIN_DDP_NPROC"
+if [[ "$DISTILL_DDP_NPROC" -gt "$MAX_DDP_NPROC" ]]; then MAX_DDP_NPROC="$DISTILL_DDP_NPROC"; fi
+if [[ "$UNLEARN_FSDP_NPROC" -gt "$MAX_DDP_NPROC" ]]; then MAX_DDP_NPROC="$UNLEARN_FSDP_NPROC"; fi
+VISIBLE_GPUS="$(normalize_visible_gpus "$MAX_DDP_NPROC")"
 
 if [[ ! -x "$PY" ]]; then
   log "ERROR: python not found at $PY (run setup.sh?)"

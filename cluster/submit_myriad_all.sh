@@ -99,11 +99,8 @@ submit() {
   local gpus="$3"
   local time="$4"
   local dep="${5:-}"
-  local visible_gpus
-  visible_gpus="$(seq -s, 0 $((gpus-1)))"
-
   local vars
-  vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,VISIBLE_GPUS=$visible_gpus,REPO_ROOT=$ROOT"
+  vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,REPO_ROOT=$ROOT"
   if [[ -n "$REUSE_DATASETS" ]]; then
     vars="$vars,REUSE_DATASETS=$REUSE_DATASETS"
   fi

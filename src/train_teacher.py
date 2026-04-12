@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import os
 
 import datasets
@@ -57,33 +58,44 @@ def main():
 
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-    train_args = TrainingArguments(
-        output_dir=args.output,
-        num_train_epochs=args.epochs,
-        learning_rate=args.lr,
-        warmup_steps=args.warmup_steps,
-        per_device_train_batch_size=args.per_device_batch,
-        gradient_accumulation_steps=args.grad_accum,
-        save_steps=args.save_steps,
-        save_strategy=args.save_strategy,
-        logging_steps=args.logging_steps,
-        evaluation_strategy="no" if args.eval_steps == 0 else "steps",
-        eval_steps=args.eval_steps if args.eval_steps > 0 else None,
-        bf16=args.bf16,
-        fp16=args.fp16,
-        seed=args.seed,
-        report_to="none",
-        remove_unused_columns=False,
-        ddp_find_unused_parameters=False,
-        gradient_checkpointing=args.grad_checkpointing,
-        optim=args.optim,
-        fsdp=args.fsdp or "",
-        fsdp_transformer_layer_cls_to_wrap=args.fsdp_transformer_layer_cls,
-        fsdp_min_num_params=args.fsdp_min_num_params,
-        dataloader_num_workers=args.dataloader_num_workers,
-        dataloader_pin_memory=args.dataloader_pin_memory,
-        max_steps=args.max_steps,
-    )
+    ta_params = inspect.signature(TrainingArguments.__init__).parameters
+    train_kwargs = {
+        "output_dir": args.output,
+        "num_train_epochs": args.epochs,
+        "learning_rate": args.lr,
+        "warmup_steps": args.warmup_steps,
+        "per_device_train_batch_size": args.per_device_batch,
+        "gradient_accumulation_steps": args.grad_accum,
+        "save_steps": args.save_steps,
+        "save_strategy": args.save_strategy,
+        "logging_steps": args.logging_steps,
+        "bf16": args.bf16,
+        "fp16": args.fp16,
+        "seed": args.seed,
+        "report_to": "none",
+        "remove_unused_columns": False,
+        "gradient_checkpointing": args.grad_checkpointing,
+        "optim": args.optim,
+        "dataloader_num_workers": args.dataloader_num_workers,
+        "dataloader_pin_memory": args.dataloader_pin_memory,
+        "max_steps": args.max_steps,
+    }
+    if "evaluation_strategy" in ta_params:
+        train_kwargs["evaluation_strategy"] = "no" if args.eval_steps == 0 else "steps"
+    elif "eval_strategy" in ta_params:
+        train_kwargs["eval_strategy"] = "no" if args.eval_steps == 0 else "steps"
+    if args.eval_steps > 0 and "eval_steps" in ta_params:
+        train_kwargs["eval_steps"] = args.eval_steps
+    if "ddp_find_unused_parameters" in ta_params:
+        train_kwargs["ddp_find_unused_parameters"] = False
+    if "fsdp" in ta_params:
+        train_kwargs["fsdp"] = args.fsdp or ""
+    if "fsdp_transformer_layer_cls_to_wrap" in ta_params:
+        train_kwargs["fsdp_transformer_layer_cls_to_wrap"] = args.fsdp_transformer_layer_cls
+    if "fsdp_min_num_params" in ta_params:
+        train_kwargs["fsdp_min_num_params"] = args.fsdp_min_num_params
+
+    train_args = TrainingArguments(**train_kwargs)
 
     trainer = Trainer(
         model=model,

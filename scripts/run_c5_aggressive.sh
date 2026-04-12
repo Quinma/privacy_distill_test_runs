@@ -52,6 +52,24 @@ fi
 
 mkdir -p "$TEACHERS_DIR" "$STUDENTS_DIR" "$MIA_DIR"
 
+normalize_visible_gpus() {
+  local required="$1"
+  local current="${VISIBLE_GPUS:-}"
+  local count=0
+  if [[ -n "$current" ]]; then
+    count="$(awk -F',' '{print NF}' <<< "$current")"
+  fi
+  if [[ -z "$current" || "$count" -lt "$required" ]]; then
+    seq -s, 0 $((required-1))
+  else
+    echo "$current"
+  fi
+}
+
+MAX_DDP_NPROC="$UNLEARN_FSDP_NPROC"
+if [[ "$DISTILL_DDP_NPROC" -gt "$MAX_DDP_NPROC" ]]; then MAX_DDP_NPROC="$DISTILL_DDP_NPROC"; fi
+VISIBLE_GPUS="$(normalize_visible_gpus "$MAX_DDP_NPROC")"
+
 if [[ -z "$HOLDOUT_UTILITY_DATASET" ]]; then
   if [[ -d "$DATASETS_DIR/eval_target_holdout_tok" ]]; then
     HOLDOUT_UTILITY_DATASET="$DATASETS_DIR/eval_target_holdout_tok"
