@@ -58,6 +58,10 @@ RUN_UTILITY="${RUN_UTILITY:-0}"
 REUSE_DATASETS="${REUSE_DATASETS:-0}"
 RUN_C5M="${RUN_C5M:-0}"
 SKIP_TRAIN="${SKIP_TRAIN:-0}"
+RUN_C1="${RUN_C1:-1}"
+RUN_C2="${RUN_C2:-1}"
+RUN_C3="${RUN_C3:-1}"
+TEACHER_ONLY="${TEACHER_ONLY:-0}"
 
 FSDP_NPROC="${FSDP_NPROC:-1}"
 UNLEARN_FSDP_NPROC="${UNLEARN_FSDP_NPROC:-1}"
@@ -218,6 +222,7 @@ trap 'log "ABORTED"; exit 1' INT TERM
 
 log "Pipeline start: RUN_TAG=$RUN_TAG MODEL=$MODEL STUDENT=$STUDENT"
 log "DDP settings: TRAIN_DDP_NPROC=$TRAIN_DDP_NPROC DISTILL_DDP_NPROC=$DISTILL_DDP_NPROC UNLEARN_FSDP_NPROC=$UNLEARN_FSDP_NPROC VISIBLE_GPUS=$VISIBLE_GPUS"
+log "Teacher flags: RUN_C1=$RUN_C1 RUN_C2=$RUN_C2 RUN_C3=$RUN_C3 TEACHER_ONLY=$TEACHER_ONLY"
 
 if [[ "$RUN_GATE" == "1" ]]; then
   run_step_retry gate 2 \
@@ -304,7 +309,9 @@ distill_cmd() {
   fi
 }
 
-if [[ "$SKIP_TRAIN" == "1" ]]; then
+if [[ "$RUN_C1" != "1" ]]; then
+  log "SKIP train_c1 (RUN_C1=0)"
+elif [[ "$SKIP_TRAIN" == "1" ]]; then
   log "SKIP train_c1 (SKIP_TRAIN=1)"
   touch "$MARKERS/train_c1.done"
 elif ! model_ready "$TEACHERS_DIR/c1"; then
@@ -320,7 +327,9 @@ else
   touch "$MARKERS/train_c1.done"
 fi
 
-if [[ "$SKIP_TRAIN" == "1" ]]; then
+if [[ "$RUN_C2" != "1" ]]; then
+  log "SKIP train_c2 (RUN_C2=0)"
+elif [[ "$SKIP_TRAIN" == "1" ]]; then
   log "SKIP train_c2 (SKIP_TRAIN=1)"
   touch "$MARKERS/train_c2.done"
 elif ! model_ready "$TEACHERS_DIR/c2"; then
@@ -336,7 +345,9 @@ else
   touch "$MARKERS/train_c2.done"
 fi
 
-if [[ "$SKIP_TRAIN" == "1" ]]; then
+if [[ "$RUN_C3" != "1" ]]; then
+  log "SKIP train_c3 (RUN_C3=0)"
+elif [[ "$SKIP_TRAIN" == "1" ]]; then
   log "SKIP train_c3 (SKIP_TRAIN=1)"
   touch "$MARKERS/train_c3.done"
 elif ! model_ready "$TEACHERS_DIR/c3"; then
@@ -350,6 +361,11 @@ elif ! model_ready "$TEACHERS_DIR/c3"; then
 else
   log "SKIP train_c3 (model exists)"
   touch "$MARKERS/train_c3.done"
+fi
+
+if [[ "$TEACHER_ONLY" == "1" ]]; then
+  log "Teacher-only mode complete."
+  exit 0
 fi
 
 if [[ "$SKIP_TRAIN" == "1" ]]; then
