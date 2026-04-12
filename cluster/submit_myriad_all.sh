@@ -100,9 +100,30 @@ submit() {
   local time="$4"
   local dep="${5:-}"
   local vars
-  vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,REPO_ROOT=$ROOT"
+  local train_ddp_nproc="$gpus"
+  local distill_ddp_nproc="$gpus"
+  local unlearn_fsdp_nproc="$gpus"
+  local extra_vars=""
   if [[ "$MODEL" == *"2.7B"* ]]; then
-    vars="$vars,PER_DEVICE_BATCH=1,GRAD_ACCUM=16,TRAIN_GRAD_CHECKPOINTING=1,DISTILL_GRAD_CHECKPOINTING=1"
+    case "$stage" in
+      pipeline_full)
+        train_ddp_nproc="1"
+        distill_ddp_nproc="1"
+        extra_vars="PER_DEVICE_BATCH=1,GRAD_ACCUM=16,TRAIN_FSDP=1,TRAIN_FSDP_NPROC=$gpus,TRAIN_FSDP_LAYER_CLS=GPTNeoBlock,TRAIN_GRAD_CHECKPOINTING=1,DISTILL_DDP_NPROC=1,DISTILL_TEACHER_DEVICE=cpu,DISTILL_GRAD_CHECKPOINTING=1"
+        ;;
+      c5_aggressive)
+        distill_ddp_nproc="1"
+        extra_vars="PER_DEVICE_BATCH=1,GRAD_ACCUM=16,DISTILL_DDP_NPROC=1,DISTILL_TEACHER_DEVICE=cpu,DISTILL_GRAD_CHECKPOINTING=1"
+        ;;
+      c5r)
+        distill_ddp_nproc="1"
+        extra_vars="PER_DEVICE_BATCH=1,GRAD_ACCUM=16,UNLEARN_NPROC=$gpus,DISTILL_NPROC=1,DISTILL_TEACHER_DEVICE=cpu,DISTILL_GRAD_CHECKPOINTING=1"
+        ;;
+    esac
+  fi
+  vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$train_ddp_nproc,DISTILL_DDP_NPROC=$distill_ddp_nproc,UNLEARN_FSDP_NPROC=$unlearn_fsdp_nproc,REPO_ROOT=$ROOT"
+  if [[ "$MODEL" == *"2.7B"* ]]; then
+    vars="$vars,$extra_vars"
   fi
   if [[ -n "$REUSE_DATASETS" ]]; then
     vars="$vars,REUSE_DATASETS=$REUSE_DATASETS"

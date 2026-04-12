@@ -56,9 +56,18 @@ if [[ "$GPUS" == "auto" || "$TIME" == "auto" || "$ALLOW" == "auto" ]]; then
 fi
 
 JOB_NAME="${RUN_TAG}_pipeline"
-VARS="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=pipeline_full,TRAIN_DDP_NPROC=$GPUS,DISTILL_DDP_NPROC=$GPUS,UNLEARN_FSDP_NPROC=$GPUS,REPO_ROOT=$ROOT"
+train_ddp_nproc="$GPUS"
+distill_ddp_nproc="$GPUS"
+unlearn_fsdp_nproc="$GPUS"
+extra_vars=""
 if [[ "$MODEL" == *"2.7B"* ]]; then
-  VARS="$VARS,PER_DEVICE_BATCH=1,GRAD_ACCUM=16,TRAIN_GRAD_CHECKPOINTING=1,DISTILL_GRAD_CHECKPOINTING=1"
+  train_ddp_nproc="1"
+  distill_ddp_nproc="1"
+  extra_vars="PER_DEVICE_BATCH=1,GRAD_ACCUM=16,TRAIN_FSDP=1,TRAIN_FSDP_NPROC=$GPUS,TRAIN_FSDP_LAYER_CLS=GPTNeoBlock,TRAIN_GRAD_CHECKPOINTING=1,DISTILL_DDP_NPROC=1,DISTILL_TEACHER_DEVICE=cpu,DISTILL_GRAD_CHECKPOINTING=1"
+fi
+VARS="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=pipeline_full,TRAIN_DDP_NPROC=$train_ddp_nproc,DISTILL_DDP_NPROC=$distill_ddp_nproc,UNLEARN_FSDP_NPROC=$unlearn_fsdp_nproc,REPO_ROOT=$ROOT"
+if [[ "$MODEL" == *"2.7B"* ]]; then
+  VARS="$VARS,$extra_vars"
 fi
 if [[ -n "$REUSE_DATASETS" ]]; then
   VARS="$VARS,REUSE_DATASETS=$REUSE_DATASETS"

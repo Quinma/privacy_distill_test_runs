@@ -42,6 +42,7 @@ DISTILL_LR="${DISTILL_LR:-2e-5}"
 WARMUP_STEPS="${WARMUP_STEPS:-500}"
 DISTILL_OPTIM="${DISTILL_OPTIM:-adamw_8bit}"
 DISTILL_GRAD_CHECKPOINTING="${DISTILL_GRAD_CHECKPOINTING:-0}"
+DISTILL_TEACHER_DEVICE="${DISTILL_TEACHER_DEVICE:-cuda}"
 
 EVAL_GPU="${EVAL_GPU:-0}"
 RUN_STATS="${RUN_STATS:-0}"
@@ -164,6 +165,7 @@ if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
     $PY -m torch.distributed.run --nproc_per_node="$DISTILL_DDP_NPROC" "$ROOT/src/distill_student.py" \
       --teacher "$UNLEARN_OUT" \
       --student "$STUDENT" \
+      --teacher-device "$DISTILL_TEACHER_DEVICE" \
       --dataset "$DATASETS_DIR/distill" \
       --output "$STUDENT_OUT" \
       --max-length "$MAX_LENGTH" \
@@ -180,6 +182,7 @@ else
     $PY "$ROOT/src/distill_student.py" \
       --teacher "$UNLEARN_OUT" \
       --student "$STUDENT" \
+      --teacher-device "$DISTILL_TEACHER_DEVICE" \
       --dataset "$DATASETS_DIR/distill" \
       --output "$STUDENT_OUT" \
       --max-length "$MAX_LENGTH" \

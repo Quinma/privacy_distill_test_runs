@@ -27,6 +27,8 @@ FORGET_CIKS="${FORGET_CIKS:-$DATASETS_DIR/c5r_forget_ciks.json}"
 
 VISIBLE_GPUS="${VISIBLE_GPUS:-0,1,2,3}"
 NPROC="${NPROC:-4}"
+UNLEARN_NPROC="${UNLEARN_NPROC:-$NPROC}"
+DISTILL_NPROC="${DISTILL_NPROC:-$NPROC}"
 PER_DEVICE_BATCH="${PER_DEVICE_BATCH:-2}"
 GRAD_ACCUM="${GRAD_ACCUM:-4}"
 
@@ -41,6 +43,7 @@ DISTILL_OPTIM="${DISTILL_OPTIM:-adamw_8bit}"
 DISTILL_LR="${DISTILL_LR:-2e-5}"
 WARMUP_STEPS="${WARMUP_STEPS:-500}"
 DISTILL_GRAD_CHECKPOINTING="${DISTILL_GRAD_CHECKPOINTING:-0}"
+DISTILL_TEACHER_DEVICE="${DISTILL_TEACHER_DEVICE:-cuda}"
 
 UNLEARN_LR="${UNLEARN_LR:-2e-5}"
 ALPHA="${ALPHA:-1.0}"
@@ -55,6 +58,24 @@ if [[ "$DISTILL_GRAD_CHECKPOINTING" == "1" ]]; then
 fi
 
 mkdir -p "$TEACHERS_DIR" "$STUDENTS_DIR" "$MIA_DIR"
+
+normalize_visible_gpus() {
+  local required="$1"
+  local current="${VISIBLE_GPUS:-}"
+  local count=0
+  if [[ -n "$current" ]]; then
+    count="$(awk -F',' '{print NF}' <<< "$current")"
+  fi
+  if [[ -z "$current" || "$count" -lt "$required" ]]; then
+    seq -s, 0 $((required-1))
+  else
+    echo "$current"
+  fi
+}
+
+MAX_NPROC="$UNLEARN_NPROC"
+if [[ "$DISTILL_NPROC" -gt "$MAX_NPROC" ]]; then MAX_NPROC="$DISTILL_NPROC"; fi
+VISIBLE_GPUS="$(normalize_visible_gpus "$MAX_NPROC")"
 
 normalize_visible_gpus() {
   local required="$1"
@@ -122,9 +143,9 @@ if [[ "$CLEAN" == "1" ]]; then
   rm -rf "$TEACHERS_DIR/c5r_unlearn" "$STUDENTS_DIR/c5r"
 fi
 
-echo "[c5r] Unlearning (random forget set) with FSDP on $NPROC GPUs..."
+echo "[c5r] Unlearning (random forget set) with FSDP on $UNLEARN_NPROC GPUs..."
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS" \
-  $PY -m torch.distributed.run --nproc_per_node="$NPROC" "$ROOT/src/unlearn_teacher.py" \
+  $PY -m torch.distributed.run --nproc_per_node="$UNLEARN_NPROC" "$ROOT/src/unlearn_teacher.py" \
     --model "$TEACHERS_DIR/c1" \
     --forget-dataset "$FORGET_OUT" \
     --retain-dataset "$DATASETS_DIR/teacher_c2" \
@@ -140,22 +161,42 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_
     --fsdp \
     --cpu-offload
 
-echo "[c5r] Distilling student on $NPROC GPUs..."
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS" \
-  $PY -m torch.distributed.run --nproc_per_node="$NPROC" "$ROOT/src/distill_student.py" \
-    --teacher "$TEACHERS_DIR/c5r_unlearn" \
-    --student "$STUDENT" \
-    --dataset "$DATASETS_DIR/distill" \
-    --output "$STUDENTS_DIR/c5r" \
-    --max-length "$MAX_LENGTH" \
-    --epochs "$DISTILL_EPOCHS" \
-    --lr "$DISTILL_LR" \
-    --warmup-steps "$WARMUP_STEPS" \
-    --per-device-batch "$PER_DEVICE_BATCH" \
-    --grad-accum "$GRAD_ACCUM" \
-    --optim "$DISTILL_OPTIM" \
-    $DISTILL_GRAD_CHECKPOINTING_FLAG \
-    $BF16_FLAG
+echo "[c5r] Distilling student on $DISTILL_NPROC GPUs..."
+if [[ "$DISTILL_NPROC" -gt 1 ]]; then
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS" \
+    $PY -m torch.distributed.run --nproc_per_node="$DISTILL_NPROC" "$ROOT/src/distill_student.py" \
+      --teacher "$TEACHERS_DIR/c5r_unlearn" \
+      --student "$STUDENT" \
+      --teacher-device "$DISTILL_TEACHER_DEVICE" \
+      --dataset "$DATASETS_DIR/distill" \
+      --output "$STUDENTS_DIR/c5r" \
+      --max-length "$MAX_LENGTH" \
+      --epochs "$DISTILL_EPOCHS" \
+      --lr "$DISTILL_LR" \
+      --warmup-steps "$WARMUP_STEPS" \
+      --per-device-batch "$PER_DEVICE_BATCH" \
+      --grad-accum "$GRAD_ACCUM" \
+      --optim "$DISTILL_OPTIM" \
+      $DISTILL_GRAD_CHECKPOINTING_FLAG \
+      $BF16_FLAG
+else
+  CUDA_VISIBLE_DEVICES=0 \
+    $PY "$ROOT/src/distill_student.py" \
+      --teacher "$TEACHERS_DIR/c5r_unlearn" \
+      --student "$STUDENT" \
+      --teacher-device "$DISTILL_TEACHER_DEVICE" \
+      --dataset "$DATASETS_DIR/distill" \
+      --output "$STUDENTS_DIR/c5r" \
+      --max-length "$MAX_LENGTH" \
+      --epochs "$DISTILL_EPOCHS" \
+      --lr "$DISTILL_LR" \
+      --warmup-steps "$WARMUP_STEPS" \
+      --per-device-batch "$PER_DEVICE_BATCH" \
+      --grad-accum "$GRAD_ACCUM" \
+      --optim "$DISTILL_OPTIM" \
+      $DISTILL_GRAD_CHECKPOINTING_FLAG \
+      $BF16_FLAG
+fi
 
 echo "[c5r] Evaluating student (canonical holdout/nonmember)..."
 CUDA_VISIBLE_DEVICES=0 $PY "$ROOT/src/eval_mia.py" \
