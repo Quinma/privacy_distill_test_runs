@@ -34,6 +34,8 @@ WARMUP_STEPS="${WARMUP_STEPS:-500}"
 PER_DEVICE_BATCH="${PER_DEVICE_BATCH:-2}"
 GRAD_ACCUM="${GRAD_ACCUM:-16}"
 OPTIM="${OPTIM:-adamw_8bit}"
+TRAIN_GRAD_CHECKPOINTING="${TRAIN_GRAD_CHECKPOINTING:-0}"
+DISTILL_GRAD_CHECKPOINTING="${DISTILL_GRAD_CHECKPOINTING:-0}"
 BF16="${BF16:-1}"
 VISIBLE_GPUS="${VISIBLE_GPUS:-0,1,2,3}"
 TRAIN_GPU="${TRAIN_GPU:-0}"
@@ -248,6 +250,12 @@ fi
 BF16_FLAG=""
 if [[ "$BF16" == "1" ]]; then BF16_FLAG="--bf16"; fi
 
+TRAIN_GRAD_CHECKPOINTING_FLAG=""
+if [[ "$TRAIN_GRAD_CHECKPOINTING" == "1" ]]; then TRAIN_GRAD_CHECKPOINTING_FLAG="--grad-checkpointing"; fi
+
+DISTILL_GRAD_CHECKPOINTING_FLAG=""
+if [[ "$DISTILL_GRAD_CHECKPOINTING" == "1" ]]; then DISTILL_GRAD_CHECKPOINTING_FLAG="--grad-checkpointing"; fi
+
 train_teacher_cmd() {
   local dataset="$1" out="$2"
   local resume
@@ -258,9 +266,9 @@ train_teacher_cmd() {
     if [[ $ga -lt 1 ]]; then ga=1; fi
   fi
   if [[ -n "$resume" ]]; then
-    echo "$PY src/train_teacher.py --model '$MODEL' --dataset '$dataset' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $BF16_FLAG --resume '$resume'"
+    echo "$PY src/train_teacher.py --model '$MODEL' --dataset '$dataset' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $TRAIN_GRAD_CHECKPOINTING_FLAG $BF16_FLAG --resume '$resume'"
   else
-    echo "$PY src/train_teacher.py --model '$MODEL' --dataset '$dataset' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $BF16_FLAG"
+    echo "$PY src/train_teacher.py --model '$MODEL' --dataset '$dataset' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $TRAIN_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   fi
 }
 
@@ -274,9 +282,9 @@ distill_cmd() {
     if [[ $ga -lt 1 ]]; then ga=1; fi
   fi
   if [[ -n "$resume" ]]; then
-    echo "$PY src/distill_student.py --teacher '$teacher' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $BF16_FLAG --resume '$resume'"
+    echo "$PY src/distill_student.py --teacher '$teacher' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $DISTILL_GRAD_CHECKPOINTING_FLAG $BF16_FLAG --resume '$resume'"
   else
-    echo "$PY src/distill_student.py --teacher '$teacher' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $BF16_FLAG"
+    echo "$PY src/distill_student.py --teacher '$teacher' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$out' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $ga --optim $OPTIM $DISTILL_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   fi
 }
 
@@ -285,7 +293,7 @@ if [[ "$SKIP_TRAIN" == "1" ]]; then
   touch "$MARKERS/train_c1.done"
 elif ! model_ready "$TEACHERS_DIR/c1"; then
   if [[ "$TRAIN_DDP_NPROC" -gt 1 ]]; then
-    run_step train_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c1' --output '$TEACHERS_DIR/c1' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    run_step train_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c1' --output '$TEACHERS_DIR/c1' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $TRAIN_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   else
     run_step train_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$TRAIN_GPU $(train_teacher_cmd "$DATASETS_DIR/teacher_c1" "$TEACHERS_DIR/c1")"
   fi
@@ -299,7 +307,7 @@ if [[ "$SKIP_TRAIN" == "1" ]]; then
   touch "$MARKERS/train_c2.done"
 elif ! model_ready "$TEACHERS_DIR/c2"; then
   if [[ "$TRAIN_DDP_NPROC" -gt 1 ]]; then
-    run_step train_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c2' --output '$TEACHERS_DIR/c2' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    run_step train_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c2' --output '$TEACHERS_DIR/c2' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $TRAIN_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   else
     run_step train_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$TRAIN_GPU $(train_teacher_cmd "$DATASETS_DIR/teacher_c2" "$TEACHERS_DIR/c2")"
   fi
@@ -313,7 +321,7 @@ if [[ "$SKIP_TRAIN" == "1" ]]; then
   touch "$MARKERS/train_c3.done"
 elif ! model_ready "$TEACHERS_DIR/c3"; then
   if [[ "$TRAIN_DDP_NPROC" -gt 1 ]]; then
-    run_step train_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c3' --output '$TEACHERS_DIR/c3' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    run_step train_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$TRAIN_DDP_NPROC src/train_teacher.py --model '$MODEL' --dataset '$DATASETS_DIR/teacher_c3' --output '$TEACHERS_DIR/c3' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / TRAIN_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / TRAIN_DDP_NPROC)) --optim $OPTIM $TRAIN_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   else
     run_step train_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$TRAIN_GPU $(train_teacher_cmd "$DATASETS_DIR/teacher_c3" "$TEACHERS_DIR/c3")"
   fi
@@ -327,7 +335,7 @@ if [[ "$SKIP_TRAIN" == "1" ]]; then
   touch "$MARKERS/distill_c1.done"
 elif ! model_ready "$STUDENTS_DIR/c1"; then
   if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
-    run_step distill_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c1' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c1' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    run_step distill_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c1' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c1' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $DISTILL_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   else
     run_step distill_c1 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$DISTILL_GPU $(distill_cmd "$TEACHERS_DIR/c1" "$STUDENTS_DIR/c1")"
   fi
@@ -341,7 +349,7 @@ if [[ "$SKIP_TRAIN" == "1" ]]; then
   touch "$MARKERS/distill_c2.done"
 elif ! model_ready "$STUDENTS_DIR/c2"; then
   if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
-    run_step distill_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c2' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c2' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    run_step distill_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c2' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c2' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $DISTILL_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   else
     run_step distill_c2 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$DISTILL_GPU $(distill_cmd "$TEACHERS_DIR/c2" "$STUDENTS_DIR/c2")"
   fi
@@ -355,7 +363,7 @@ if [[ "$SKIP_TRAIN" == "1" ]]; then
   touch "$MARKERS/distill_c3.done"
 elif ! model_ready "$STUDENTS_DIR/c3"; then
   if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
-    run_step distill_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c3' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c3' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+    run_step distill_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c3' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c3' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $DISTILL_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
   else
     run_step distill_c3 "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$DISTILL_GPU $(distill_cmd "$TEACHERS_DIR/c3" "$STUDENTS_DIR/c3")"
   fi
@@ -380,7 +388,7 @@ if [[ "$RUN_C5M" == "1" && "$SKIP_TRAIN" != "1" ]]; then
 
   if ! model_ready "$STUDENTS_DIR/c5_mild"; then
     if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
-      run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c5_mild_unlearn' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c5_mild' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $BF16_FLAG"
+      run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$VISIBLE_GPUS $PY -m torch.distributed.run --nproc_per_node=$DISTILL_DDP_NPROC src/distill_student.py --teacher '$TEACHERS_DIR/c5_mild_unlearn' --student '$STUDENT' --dataset '$DATASETS_DIR/distill' --output '$STUDENTS_DIR/c5_mild' --max-length $MAX_LENGTH --epochs $EPOCHS --lr $LR --warmup-steps $WARMUP_STEPS --per-device-batch $PER_DEVICE_BATCH --grad-accum $((GRAD_ACCUM / DISTILL_DDP_NPROC < 1 ? 1 : GRAD_ACCUM / DISTILL_DDP_NPROC)) --optim $OPTIM $DISTILL_GRAD_CHECKPOINTING_FLAG $BF16_FLAG"
     else
       run_step distill_c5m "PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES=$DISTILL_GPU $(distill_cmd "$TEACHERS_DIR/c5_mild_unlearn" "$STUDENTS_DIR/c5_mild")"
     fi

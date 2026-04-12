@@ -101,6 +101,9 @@ submit() {
   local dep="${5:-}"
   local vars
   vars="MODEL=$MODEL,STUDENT=$STUDENT,RUN_TAG=$RUN_TAG,STAGE=$stage,TRAIN_DDP_NPROC=$gpus,DISTILL_DDP_NPROC=$gpus,UNLEARN_FSDP_NPROC=$gpus,REPO_ROOT=$ROOT"
+  if [[ "$MODEL" == *"2.7B"* ]]; then
+    vars="$vars,PER_DEVICE_BATCH=1,GRAD_ACCUM=16,TRAIN_GRAD_CHECKPOINTING=1,DISTILL_GRAD_CHECKPOINTING=1"
+  fi
   if [[ -n "$REUSE_DATASETS" ]]; then
     vars="$vars,REUSE_DATASETS=$REUSE_DATASETS"
   fi

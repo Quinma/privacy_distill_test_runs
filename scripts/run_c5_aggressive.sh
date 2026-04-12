@@ -41,6 +41,7 @@ DISTILL_EPOCHS="${DISTILL_EPOCHS:-1}"
 DISTILL_LR="${DISTILL_LR:-2e-5}"
 WARMUP_STEPS="${WARMUP_STEPS:-500}"
 DISTILL_OPTIM="${DISTILL_OPTIM:-adamw_8bit}"
+DISTILL_GRAD_CHECKPOINTING="${DISTILL_GRAD_CHECKPOINTING:-0}"
 
 EVAL_GPU="${EVAL_GPU:-0}"
 RUN_STATS="${RUN_STATS:-0}"
@@ -48,6 +49,11 @@ RUN_STATS="${RUN_STATS:-0}"
 BF16_FLAG=""
 if [[ "$BF16" == "1" ]]; then
   BF16_FLAG="--bf16"
+fi
+
+DISTILL_GRAD_CHECKPOINTING_FLAG=""
+if [[ "$DISTILL_GRAD_CHECKPOINTING" == "1" ]]; then
+  DISTILL_GRAD_CHECKPOINTING_FLAG="--grad-checkpointing"
 fi
 
 mkdir -p "$TEACHERS_DIR" "$STUDENTS_DIR" "$MIA_DIR"
@@ -167,6 +173,7 @@ if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
       --per-device-batch "$PER_DEVICE_BATCH" \
       --grad-accum "$GRAD_ACCUM" \
       --optim "$DISTILL_OPTIM" \
+      $DISTILL_GRAD_CHECKPOINTING_FLAG \
       $BF16_FLAG
 else
   CUDA_VISIBLE_DEVICES="$DISTILL_GPU" \
@@ -182,6 +189,7 @@ else
       --per-device-batch "$PER_DEVICE_BATCH" \
       --grad-accum "$GRAD_ACCUM" \
       --optim "$DISTILL_OPTIM" \
+      $DISTILL_GRAD_CHECKPOINTING_FLAG \
       $BF16_FLAG
 fi
 

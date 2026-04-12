@@ -40,6 +40,7 @@ DISTILL_EPOCHS="${DISTILL_EPOCHS:-1}"
 DISTILL_OPTIM="${DISTILL_OPTIM:-adamw_8bit}"
 DISTILL_LR="${DISTILL_LR:-2e-5}"
 WARMUP_STEPS="${WARMUP_STEPS:-500}"
+DISTILL_GRAD_CHECKPOINTING="${DISTILL_GRAD_CHECKPOINTING:-0}"
 
 UNLEARN_LR="${UNLEARN_LR:-2e-5}"
 ALPHA="${ALPHA:-1.0}"
@@ -47,6 +48,11 @@ BETA="${BETA:-1.0}"
 
 BF16_FLAG="--bf16"
 CLEAN="${CLEAN:-0}"
+
+DISTILL_GRAD_CHECKPOINTING_FLAG=""
+if [[ "$DISTILL_GRAD_CHECKPOINTING" == "1" ]]; then
+  DISTILL_GRAD_CHECKPOINTING_FLAG="--grad-checkpointing"
+fi
 
 mkdir -p "$TEACHERS_DIR" "$STUDENTS_DIR" "$MIA_DIR"
 
@@ -148,6 +154,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_
     --per-device-batch "$PER_DEVICE_BATCH" \
     --grad-accum "$GRAD_ACCUM" \
     --optim "$DISTILL_OPTIM" \
+    $DISTILL_GRAD_CHECKPOINTING_FLAG \
     $BF16_FLAG
 
 echo "[c5r] Evaluating student (canonical holdout/nonmember)..."
