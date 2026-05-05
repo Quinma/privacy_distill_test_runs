@@ -62,4 +62,4 @@ Use `torchrun --nproc_per_node 4` on a 4x3090 machine. Example scripts are in `s
 ## Reproducibility Notes
 
 - Run-specific numeric results are not tracked in this README. Keep results in `outputs/` artifacts or external summary sheets.
-- For review-oriented entry points and implementation pointers, see `docs/review_bundle/README.md`.
+- For implementation entry points and audit pointers, see `docs/implementation_audit/README.md`.
