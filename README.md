@@ -59,25 +59,7 @@ Use `torchrun --nproc_per_node 4` on a 4x3090 machine. Example scripts are in `s
 - To cap per-company training volume, set `MAX_TOKENS_PER_COMPANY` when running `scripts/run_build.sh` (e.g. `500000`).
 - Per-company cap is applied **after** holdout selection, and training docs are shuffled to avoid temporal bias.
 
-## Stats (Current Run, BeanCounter holdout, company-level)
+## Reproducibility Notes
 
-**C1 vs C3 (paired loss-ratio, per-company, n=50)**
-- Mean Δ (C1−C3): **−0.02318**
-- Median Δ: **−0.01918**
-- 95% bootstrap CI (mean Δ): **[−0.02694, −0.01972]**
-- Permutation test (sign-flip, 20k): **p = 5.0e‑05**
-- Sign test: **50/50 in same direction**, two‑sided **p = 1.78e‑15**
-- AUROC Δ (C1−C3) bootstrap: mean **0.0219**, 95% CI **[−0.0677, 0.1129]** (not significant)
-
-**C5 vs C3 (paired loss-ratio, per-company, n=50)**
-- Mean Δ (C5−C3): **+0.32647**
-- Median Δ: **+0.37272**
-- 95% bootstrap CI (mean Δ): **[+0.23327, +0.42112]**
-- Permutation test (sign-flip, 20k): **p = 5.0e‑05**
-- Sign test: **41/50 positive**, two‑sided **p = 5.61e‑06**
-- AUROC Δ (C5−C3) bootstrap: mean **−0.2505**, 95% CI **[−0.3501, −0.1490]**
-
-**Reference outputs**
-- `outputs/mia/c1_student_bc_full.json`
-- `outputs/mia/c3_student_bc_full.json`
-- `outputs/mia/c5_student_bc_full.json`
+- Run-specific numeric results are not tracked in this README. Keep results in `outputs/` artifacts or external summary sheets.
+- For review-oriented entry points and implementation pointers, see `docs/review_bundle/README.md`.
