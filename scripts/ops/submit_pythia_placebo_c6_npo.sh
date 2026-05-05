@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 
 ssh "$REMOTE_HOST" "REMOTE_ROOT='$REMOTE_ROOT' bash -s" <<'REMOTE'
 set -euo pipefail
 
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 RUN_TAG="${RUN_TAG:-pythia-1.4b-placebo-npo-s13}"
 REF_EVAL_DIR="$ROOT/outputs/$RUN_TAG/reference_eval"
 cd "$ROOT"

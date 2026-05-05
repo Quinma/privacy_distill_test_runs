@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 CONTROL_PATH="${CONTROL_PATH:-$HOME/.ssh/cm-%r@%h:%p}"
 SSH_OPTS=(-o ControlMaster=auto -o ControlPersist=15m -o ControlPath="$CONTROL_PATH")
 RSYNC_RSH="ssh ${SSH_OPTS[*]}"
@@ -33,7 +33,7 @@ rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$LOCAL_RETAIN/" "$REMOTE_HOST:$REMOTE_
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "REMOTE_ROOT='$REMOTE_ROOT' REMOTE_RETAIN='$REMOTE_RETAIN' REMOTE_TARGET='$REMOTE_TARGET' bash -s" <<'REMOTE'
 set -euo pipefail
 
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 RETAIN="${REMOTE_RETAIN:-$ROOT/data/datasets/eval_retain_holdout}"
 TARGET="${REMOTE_TARGET:-$ROOT/data/datasets/gpt-neo-fixed-20260419/eval_target_holdout}"
 cd "$ROOT"

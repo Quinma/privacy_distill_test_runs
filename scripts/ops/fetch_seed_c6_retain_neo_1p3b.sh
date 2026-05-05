@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 RUN_TAG="${RUN_TAG:-gpt-neo-1.3b-local}"
 NEO_SEEDS="${NEO_SEEDS:-17 19}"
 STAGING_DIR="${STAGING_DIR:-$WORKSPACE_ROOT/exp/outputs/myriad_seed_c6_neo_20260505}"
@@ -25,7 +25,7 @@ SSH_CMD=(ssh -S "$CONTROL_PATH" "$REMOTE_HOST")
 
 "${SSH_CMD[@]}" "REMOTE_ROOT='$REMOTE_ROOT' RUN_TAG='$RUN_TAG' NEO_SEEDS='$NEO_SEEDS' bash -s" > "$STAGING_DIR/neo_seed_c6_remote_status.txt" <<'REMOTE'
 set -euo pipefail
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 RUN_TAG="${RUN_TAG:-gpt-neo-1.3b-local}"
 NEO_SEEDS="${NEO_SEEDS:-17 19}"
 cd "$ROOT"

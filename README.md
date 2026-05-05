@@ -64,3 +64,4 @@ Use `torchrun --nproc_per_node 4` on a 4x3090 machine. Example scripts are in `s
 - Run-specific numeric results are not tracked in this README. Keep results in `outputs/` artifacts or external summary sheets.
 - For implementation entry points and audit pointers, see `docs/implementation_audit/README.md`.
 - For condition definitions, placebo semantics, and the portable reproduction path, see `docs/artifact_notes.md`.
+- Environment-specific cluster sync/fetch/submit helpers are kept under `scripts/ops/` and are not part of the minimal portable artifact.

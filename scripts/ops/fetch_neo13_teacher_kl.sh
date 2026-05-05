@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 STAGING_DIR="${STAGING_DIR:-$WORKSPACE_ROOT/exp/outputs/myriad_c23_repair_20260421}"
 CONTROL_PATH="${CONTROL_PATH:-$HOME/.ssh/cm-%r@%h:%p}"
 SSH_OPTS=(-o ControlMaster=auto -o ControlPersist=15m -o ControlPath="$CONTROL_PATH")
@@ -21,7 +21,7 @@ trap cleanup EXIT
 
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "REMOTE_ROOT='$REMOTE_ROOT' bash -s" > "$STAGING_DIR/neo13_teacher_kl_remote_status.txt" <<'REMOTE'
 set -euo pipefail
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 cd "$ROOT"
 
 echo "== date =="

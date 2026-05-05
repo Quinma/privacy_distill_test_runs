@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 STAGING_DIR="${STAGING_DIR:-$WORKSPACE_ROOT/exp/outputs/myriad_placebo_c6_20260425}"
 
 mkdir -p "$STAGING_DIR/outputs" "$STAGING_DIR/logs"

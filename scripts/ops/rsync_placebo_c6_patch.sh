@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 RUN_TAG="${RUN_TAG:-pythia-1.4b-placebo-npo-s13}"
 
 ssh "$REMOTE_HOST" "mkdir -p '$REMOTE_ROOT/scripts' '$REMOTE_ROOT/data/datasets/pythia-1.4b' '$REMOTE_ROOT/outputs/$RUN_TAG/reference_eval'"

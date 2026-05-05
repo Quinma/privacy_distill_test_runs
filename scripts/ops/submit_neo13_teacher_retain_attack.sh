@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 CONTROL_PATH="${CONTROL_PATH:-$HOME/.ssh/cm-%r@%h:%p}"
 SSH_OPTS=(-o ControlMaster=auto -o ControlPersist=15m -o ControlPath="$CONTROL_PATH")
 RSYNC_RSH="ssh ${SSH_OPTS[*]}"
@@ -13,6 +13,7 @@ RSYNC_OPTS=(-av --partial --append-verify)
 
 LOCAL_RETAIN="${LOCAL_RETAIN:-$WORKSPACE_ROOT/exp/data/datasets/eval_retain_holdout}"
 REMOTE_RETAIN="${REMOTE_RETAIN:-$REMOTE_ROOT/data/datasets/eval_retain_holdout}"
+REMOTE_TARGET="${REMOTE_TARGET:-$REMOTE_ROOT/data/datasets/gpt-neo-fixed-20260419/eval_target_holdout}"
 
 mkdir -p "$(dirname "$CONTROL_PATH")"
 
@@ -29,11 +30,12 @@ fi
 ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "mkdir -p '$REMOTE_RETAIN'"
 rsync "${RSYNC_OPTS[@]}" -e "$RSYNC_RSH" "$LOCAL_RETAIN/" "$REMOTE_HOST:$REMOTE_RETAIN/"
 
-ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "REMOTE_ROOT='$REMOTE_ROOT' REMOTE_RETAIN='$REMOTE_RETAIN' bash -s" <<'REMOTE'
+ssh "${SSH_OPTS[@]}" "$REMOTE_HOST" "REMOTE_ROOT='$REMOTE_ROOT' REMOTE_RETAIN='$REMOTE_RETAIN' REMOTE_TARGET='$REMOTE_TARGET' bash -s" <<'REMOTE'
 set -euo pipefail
 
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 RETAIN="${REMOTE_RETAIN:-$ROOT/data/datasets/eval_retain_holdout}"
+TARGET="${REMOTE_TARGET:-$ROOT/data/datasets/gpt-neo-fixed-20260419/eval_target_holdout}"
 cd "$ROOT"
 
 RUN_CMD=$(cat <<'CMD'
@@ -42,66 +44,35 @@ set -euo pipefail
 PY="$REPO_ROOT/.venv/bin/python"
 TAG="gpt-neo-1.3b-local"
 OUT="$REPO_ROOT/outputs/$TAG"
-DATA="$REPO_ROOT/data/datasets/$TAG"
 RETAIN="$REPO_ROOT/data/datasets/eval_retain_holdout"
-NONMEMBER="$DATA/eval_nonmember"
-HOLDOUT_MAP="$DATA/holdout_map.json"
+TARGET="${TARGET_DATASET:-$REPO_ROOT/data/datasets/gpt-neo-fixed-20260419/eval_target_holdout}"
+ATTACK_DIR="$OUT/mia_teacher_attack"
+mkdir -p "$ATTACK_DIR"
 
 if [[ ! -d "$RETAIN" ]]; then
   echo "ERROR: retain holdout dataset missing: $RETAIN" >&2
   exit 1
 fi
-
-RUN_BASE="$OUT"
-if [[ -d "$OUT/seed_reps/seed_13/students/c6" ]]; then
-  RUN_BASE="$OUT/seed_reps/seed_13"
+if [[ ! -d "$TARGET" ]]; then
+  echo "ERROR: target holdout dataset missing: $TARGET" >&2
+  exit 1
 fi
 
-model_path() {
+teacher_model() {
   local condition="$1"
-  if [[ -d "$RUN_BASE/students/$condition" ]]; then
-    printf '%s\n' "$RUN_BASE/students/$condition"
-  elif [[ -d "$OUT/students/$condition" ]]; then
-    printf '%s\n' "$OUT/students/$condition"
-  else
-    echo "ERROR: missing model for $condition under $RUN_BASE or $OUT" >&2
+  local path="$OUT/teachers/$condition"
+  if [[ ! -d "$path" ]]; then
+    echo "ERROR: missing teacher model: $path" >&2
     exit 1
   fi
+  printf '%s\n' "$path"
 }
 
-target_json() {
-  local condition="$1"
-  if [[ -f "$RUN_BASE/mia/${condition}_student.json" ]]; then
-    printf '%s\n' "$RUN_BASE/mia/${condition}_student.json"
-  elif [[ -f "$OUT/mia/${condition}_student.json" ]]; then
-    printf '%s\n' "$OUT/mia/${condition}_student.json"
-  else
-    echo "ERROR: missing target MIA JSON for $condition under $RUN_BASE or $OUT" >&2
-    exit 1
-  fi
-}
-
-C1_MODEL="$(model_path c1)"
-C3_MODEL="$(model_path c3)"
-C6_MODEL="$(model_path c6)"
-C1_TARGET="$(target_json c1)"
-C3_TARGET="$(target_json c3)"
-C6_TARGET="$(target_json c6)"
-RETAIN_MIA="$RUN_BASE/mia_retain"
-mkdir -p "$RETAIN_MIA"
-
-echo "RUN_BASE=$RUN_BASE"
-echo "C1_MODEL=$C1_MODEL"
-echo "C3_MODEL=$C3_MODEL"
-echo "C6_MODEL=$C6_MODEL"
-echo "C1_TARGET=$C1_TARGET"
-echo "C3_TARGET=$C3_TARGET"
-echo "C6_TARGET=$C6_TARGET"
-
-eval_retain_only() {
+eval_teacher_pool() {
   local model="$1"
-  local out_json="$2"
-  "$PY" - "$model" "$RETAIN" "$out_json" <<'PY'
+  local dataset="$2"
+  local out_json="$3"
+  "$PY" - "$model" "$dataset" "$out_json" <<'PY'
 import json
 import os
 import sys
@@ -115,18 +86,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 model_path, dataset_path, output_path = map(Path, sys.argv[1:4])
-device = "cuda"
-batch_size = 8
-max_length = 512
-# SEC filings can be multi-megabyte strings. We only score the first
-# max_length tokens, so cap raw text before tokenization to avoid spending
-# hours tokenizing content that will be discarded.
-max_chars = int(os.environ.get("RETAIN_EVAL_MAX_CHARS", "32768"))
+device = "cuda" if torch.cuda.is_available() else "cpu"
+batch_size = int(os.environ.get("TEACHER_ATTACK_BATCH_SIZE", "8"))
+max_length = int(os.environ.get("TEACHER_ATTACK_MAX_LENGTH", "512"))
+max_chars = int(os.environ.get("TEACHER_ATTACK_MAX_CHARS", "32768"))
 
 tokenizer = AutoTokenizer.from_pretrained(str(model_path), use_fast=True)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
-model = AutoModelForCausalLM.from_pretrained(str(model_path)).to(dtype=torch.bfloat16).to(device)
+
+dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else (torch.float16 if device == "cuda" else torch.float32)
+model = AutoModelForCausalLM.from_pretrained(str(model_path)).to(device=device, dtype=dtype)
 model.eval()
 
 ds = datasets.load_from_disk(str(dataset_path))
@@ -134,7 +104,7 @@ items = [(str(ex.get("cik", "")), ex.get("text", "")) for ex in ds]
 items = [(cik, text) for cik, text in items if cik and text]
 
 grouped = {}
-with torch.no_grad():
+with torch.inference_mode():
     for i in range(0, len(items), batch_size):
         batch = items[i : i + batch_size]
         ciks = [cik for cik, _ in batch]
@@ -160,8 +130,9 @@ with torch.no_grad():
         loss = (loss * shift_mask).sum(dim=1) / shift_mask.sum(dim=1)
         for cik, value in zip(ciks, loss.detach().cpu().tolist()):
             grouped.setdefault(cik, []).append(float(value))
-        if i == 0 or (i // batch_size + 1) % 10 == 0 or i + batch_size >= len(items):
-            print(json.dumps({"model": str(model_path), "done": min(i + batch_size, len(items)), "total": len(items)}), flush=True)
+        done = min(i + batch_size, len(items))
+        if done == len(batch) or done % 40 == 0 or done == len(items):
+            print(json.dumps({"model": str(model_path), "dataset": str(dataset_path), "done": done, "total": len(items)}), flush=True)
 
 result = {
     "dataset": str(dataset_path),
@@ -172,29 +143,21 @@ result = {
         for cik, losses in sorted(grouped.items())
     },
 }
-os.makedirs(output_path.parent, exist_ok=True)
 output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-print(json.dumps({"output": str(output_path), "num_companies": len(grouped)}, indent=2))
+print(json.dumps({"output": str(output_path), "num_companies": len(grouped)}, indent=2), flush=True)
 PY
 }
 
-for condition in c1 c3 c6; do
-  model_var="${condition^^}_MODEL"
-  model="${!model_var}"
-  out_json="$RETAIN_MIA/${condition}_student_retain.json"
-  if [[ -f "$out_json" ]]; then
-    echo "SKIP retain eval $condition: $out_json exists"
-    continue
-  fi
-  RETAIN_EVAL_MAX_CHARS=32768 CUDA_VISIBLE_DEVICES=0 eval_retain_only "$model" "$out_json"
-done
-
-"$PY" - "$C6_TARGET" "$C3_TARGET" "$C1_TARGET" \
-  "$RETAIN_MIA/c6_student_retain.json" \
-  "$RETAIN_MIA/c3_student_retain.json" \
-  "$RETAIN_MIA/c1_student_retain.json" \
-  "$RUN_BASE/mia_c6_deletion_attack_target_vs_retain.json" \
-  "$RUN_BASE/mia_c6_deletion_attack_target_vs_retain_c1ref.json" <<'PY'
+build_attack() {
+  local c6_target="$1"
+  local c3_target="$2"
+  local c1_target="$3"
+  local c6_retain="$4"
+  local c3_retain="$5"
+  local c1_retain="$6"
+  local out_c3="$7"
+  local out_c1="$8"
+  "$PY" - "$c6_target" "$c3_target" "$c1_target" "$c6_retain" "$c3_retain" "$c1_retain" "$out_c3" "$out_c1" <<'PY'
 import json
 import random
 import sys
@@ -250,7 +213,7 @@ def build(c6_target, ref_target, c6_retain, ref_retain, reference, out_path):
     retain_vals = list(retain_delta.values())
     retain_mean = float(np.mean(retain_vals))
     result = {
-        "attack": "deletion_target_inference",
+        "attack": "deletion_target_inference_teacher",
         "reference": reference,
         "positive_class": "deleted_targets",
         "negative_class": "retained_companies",
@@ -267,7 +230,7 @@ def build(c6_target, ref_target, c6_retain, ref_retain, reference, out_path):
         "retain_delta_by_company": retain_delta,
     }
     out_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-    print(json.dumps(result, indent=2, sort_keys=True))
+    print(json.dumps(result, indent=2, sort_keys=True), flush=True)
 
 
 c6_target_path, c3_target_path, c1_target_path, c6_retain_path, c3_retain_path, c1_retain_path, out_c3_path, out_c1_path = map(Path, sys.argv[1:])
@@ -278,19 +241,52 @@ c6_retain = load_company_losses(c6_retain_path)
 c3_retain = load_company_losses(c3_retain_path)
 c1_retain = load_company_losses(c1_retain_path)
 
-build(c6_target, c3_target, c6_retain, c3_retain, "C6_minus_C3", out_c3_path)
-build(c6_target, c1_target, c6_retain, c1_retain, "C6_minus_C1", out_c1_path)
+build(c6_target, c3_target, c6_retain, c3_retain, "C6_teacher_minus_C3_teacher", out_c3_path)
+build(c6_target, c1_target, c6_retain, c1_retain, "C6_teacher_minus_C1_teacher", out_c1_path)
 PY
+}
 
-cp "$RUN_BASE/mia_c6_deletion_attack_target_vs_retain.json" "$OUT/mia_c6_deletion_attack_target_vs_retain.json"
-cp "$RUN_BASE/mia_c6_deletion_attack_target_vs_retain_c1ref.json" "$OUT/mia_c6_deletion_attack_target_vs_retain_c1ref.json"
-echo "Wrote target-vs-retain deletion attacks under $RUN_BASE and copied to $OUT"
+C1_MODEL="$(teacher_model c1)"
+C3_MODEL="$(teacher_model c3)"
+C6_MODEL="$(teacher_model c6_unlearn)"
+
+for cond in c1 c3 c6; do
+  case "$cond" in
+    c1) model="$C1_MODEL" ;;
+    c3) model="$C3_MODEL" ;;
+    c6) model="$C6_MODEL" ;;
+  esac
+  for split in target retain; do
+    case "$split" in
+      target) dataset="$TARGET" ;;
+      retain) dataset="$RETAIN" ;;
+    esac
+    out_json="$ATTACK_DIR/${cond}_teacher_${split}.json"
+    if [[ -f "$out_json" ]]; then
+      echo "SKIP teacher eval ${cond}/${split}: $out_json exists"
+      continue
+    fi
+    CUDA_VISIBLE_DEVICES=0 eval_teacher_pool "$model" "$dataset" "$out_json"
+  done
+done
+
+build_attack \
+  "$ATTACK_DIR/c6_teacher_target.json" \
+  "$ATTACK_DIR/c3_teacher_target.json" \
+  "$ATTACK_DIR/c1_teacher_target.json" \
+  "$ATTACK_DIR/c6_teacher_retain.json" \
+  "$ATTACK_DIR/c3_teacher_retain.json" \
+  "$ATTACK_DIR/c1_teacher_retain.json" \
+  "$OUT/mia_c6_teacher_deletion_attack_target_vs_retain_c3ref.json" \
+  "$OUT/mia_c6_teacher_deletion_attack_target_vs_retain_c1ref.json"
+
+echo "Wrote teacher target-vs-retain deletion attacks under $OUT"
 CMD
 )
 
-qsub -N neo13-c6del \
-  -l h_rt=04:00:00 -l mem=8G -l gpu=1 \
+qsub -N neo13-tdel \
+  -l h_rt=06:00:00 -l mem=8G -l gpu=1 \
   -pe smp 4 -ac allow=L \
-  -v REPO_ROOT="$ROOT",RUN_CMD="$RUN_CMD" \
+  -v REPO_ROOT="$ROOT",RUN_CMD="$RUN_CMD",TARGET_DATASET="$TARGET" \
   cluster/qsub_run.sh
 REMOTE

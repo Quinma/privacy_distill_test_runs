@@ -2,12 +2,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 LOCAL_ROOT="$WORKSPACE_ROOT/local_repo"
 EXP_ROOT="$WORKSPACE_ROOT/exp"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 NEO_SEEDS="${NEO_SEEDS:-17 19}"
 RUN_TAG="${RUN_TAG:-gpt-neo-1.3b-local}"
 DATASET_TAG="${DATASET_TAG:-gpt-neo-fixed-20260419}"
@@ -74,7 +74,7 @@ sync_seed_inputs() {
 submit_job() {
   "${SSH_CMD[@]}" "REMOTE_ROOT='$REMOTE_ROOT' NEO_SEEDS='$NEO_SEEDS' RUN_TAG='$RUN_TAG' DATASET_TAG='$DATASET_TAG' bash -s" <<'REMOTE'
 set -euo pipefail
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 NEO_SEEDS="${NEO_SEEDS:-17 19}"
 RUN_TAG="${RUN_TAG:-gpt-neo-1.3b-local}"
 DATASET_TAG="${DATASET_TAG:-gpt-neo-fixed-20260419}"

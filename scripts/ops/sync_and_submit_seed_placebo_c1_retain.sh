@@ -2,12 +2,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 EXP_ROOT="$WORKSPACE_ROOT/exp"
 LOCAL_ROOT="$WORKSPACE_ROOT/local_repo"
 
-REMOTE_HOST="${REMOTE_HOST:-ucacmqu@myriad.rc.ucl.ac.uk}"
-REMOTE_ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+REMOTE_HOST="${REMOTE_HOST:-user@cluster.example.edu}"
+REMOTE_ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 FAMILIES="${FAMILIES:-pythia neo}"
 PYTHIA_SEEDS="${PYTHIA_SEEDS:-13 17 19}"
 NEO_SEEDS="${NEO_SEEDS:-17 19}"
@@ -130,7 +130,7 @@ submit_pythia() {
   "${SSH_CMD[@]}" "REMOTE_ROOT='$REMOTE_ROOT' PYTHIA_SEEDS='$PYTHIA_SEEDS' bash -s" <<'REMOTE'
 set -euo pipefail
 
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 PYTHIA_SEEDS="${PYTHIA_SEEDS:-13 17 19}"
 cd "$ROOT"
 
@@ -190,7 +190,7 @@ submit_neo() {
   "${SSH_CMD[@]}" "REMOTE_ROOT='$REMOTE_ROOT' NEO_SEEDS='$NEO_SEEDS' NEO_RUN_TAG='$NEO_RUN_TAG' bash -s" <<'REMOTE'
 set -euo pipefail
 
-ROOT="${REMOTE_ROOT:-/myriadfs/home/ucacmqu/privacy_distill_test_runs}"
+ROOT="${REMOTE_ROOT:-/path/to/privacy_distill_test_runs}"
 NEO_SEEDS="${NEO_SEEDS:-17 19}"
 NEO_RUN_TAG="${NEO_RUN_TAG:-gpt-neo-1.3b-local}"
 cd "$ROOT"

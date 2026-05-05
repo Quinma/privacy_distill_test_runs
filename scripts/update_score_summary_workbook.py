@@ -540,7 +540,7 @@ def seed_rows():
 
 
 def pythia_seed_c5_teacher_backfill_rows():
-    root = Path("/myriadfs/home/ucacmqu/privacy_distill_test_runs")
+    root = Path("/path/to/privacy_distill_test_runs")
     dataset = str(root / "data" / "datasets" / "pythia-1.4b" / "distill")
     rows = [
         {

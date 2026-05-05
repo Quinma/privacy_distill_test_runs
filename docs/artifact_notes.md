@@ -25,4 +25,4 @@ Portable entry points for reproducing the main experiments are:
 - `scripts/run_c6_npo_neo_1p3b.sh`
 - `scripts/make_tables.py`
 
-Environment-specific Myriad / staging wrappers remain in `scripts/`, but they are operational helpers rather than the minimal portable reproduction path.
+Environment-specific cluster / staging wrappers are isolated under `scripts/ops/`. They are operational helpers rather than the minimal portable reproduction path, and they now use placeholder `REMOTE_HOST` / `REMOTE_ROOT` defaults that must be overridden locally.
