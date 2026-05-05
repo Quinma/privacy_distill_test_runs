@@ -17,7 +17,7 @@ CIK_MAP="${CIK_MAP:-$ROOT/data/sec_index_10k.jsonl}"
 
 OUTPUT="${OUTPUT:-$ROOT/data/datasets/pythia-1.4b/eval_nonmember_matched}"
 SAVE_MATCHED_JSON="${SAVE_MATCHED_JSON:-$ROOT/data/datasets/pythia-1.4b/matched_nonmember.json}"
-NONMEMBER_TOKENS="${NONMEMBER_TOKENS:-5000000}"
+NONMEMBER_TOKENS="${NONMEMBER_TOKENS:-15000000}"
 
 ARGS=(
   --dataset "$DATASET"
