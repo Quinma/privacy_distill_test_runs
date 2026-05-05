@@ -4,7 +4,7 @@ set -euo pipefail
 OPTIM=${OPTIM:-adamw_torch}
 BATCH=${BATCH:-4}
 ACCUM=${ACCUM:-8}
-EPOCHS=${EPOCHS:-1}
+EPOCHS=${EPOCHS:-3}
 WORKERS=${WORKERS:-4}
 # Use 8-bit AdamW if requested (requires bitsandbytes).
 # Example: OPTIM=adamw_8bit bash scripts/run_train_teachers.sh

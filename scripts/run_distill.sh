@@ -4,7 +4,7 @@ set -euo pipefail
 OPTIM=${OPTIM:-adamw_torch}
 BATCH=${BATCH:-4}
 ACCUM=${ACCUM:-8}
-EPOCHS=${EPOCHS:-1}
+EPOCHS=${EPOCHS:-3}
 WORKERS=${WORKERS:-4}
 USE_GC=${USE_GC:-0}
 GC_FLAG=""
