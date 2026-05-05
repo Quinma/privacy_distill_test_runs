@@ -43,6 +43,11 @@ WARMUP_STEPS="${WARMUP_STEPS:-500}"
 DISTILL_OPTIM="${DISTILL_OPTIM:-adamw_8bit}"
 DISTILL_GRAD_CHECKPOINTING="${DISTILL_GRAD_CHECKPOINTING:-0}"
 DISTILL_TEACHER_DEVICE="${DISTILL_TEACHER_DEVICE:-cuda}"
+DISTILL_TEACHER_DTYPE="${DISTILL_TEACHER_DTYPE:-float32}"
+DISTILL_CUDA_DEVICES="${DISTILL_CUDA_DEVICES:-}"
+DISTILL_MAX_GRAD_NORM="${DISTILL_MAX_GRAD_NORM:-1.0}"
+
+UNLEARN_CPU_OFFLOAD="${UNLEARN_CPU_OFFLOAD:-0}"
 
 EVAL_GPU="${EVAL_GPU:-0}"
 RUN_STATS="${RUN_STATS:-0}"
@@ -76,6 +81,14 @@ normalize_visible_gpus() {
 MAX_DDP_NPROC="$UNLEARN_FSDP_NPROC"
 if [[ "$DISTILL_DDP_NPROC" -gt "$MAX_DDP_NPROC" ]]; then MAX_DDP_NPROC="$DISTILL_DDP_NPROC"; fi
 VISIBLE_GPUS="$(normalize_visible_gpus "$MAX_DDP_NPROC")"
+
+if [[ -z "$DISTILL_CUDA_DEVICES" ]]; then
+  if [[ "$DISTILL_TEACHER_DEVICE" == "cuda:1" ]]; then
+    DISTILL_CUDA_DEVICES="0,1"
+  else
+    DISTILL_CUDA_DEVICES="$DISTILL_GPU"
+  fi
+fi
 
 if [[ -z "$HOLDOUT_UTILITY_DATASET" ]]; then
   if [[ -d "$DATASETS_DIR/eval_target_holdout_tok" ]]; then
@@ -126,6 +139,10 @@ fallback_8bit_optim DISTILL_OPTIM
 echo "[c5] Aggressive unlearning (alpha=$ALPHA beta=$BETA) on $MODEL"
 echo "[c5] Holdout utility dataset: $HOLDOUT_UTILITY_DATASET"
 if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then
+  CPU_OFFLOAD_FLAG=""
+  if [[ "$UNLEARN_CPU_OFFLOAD" == "1" ]]; then
+    CPU_OFFLOAD_FLAG="--cpu-offload"
+  fi
   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS" \
     $PY -m torch.distributed.run --nproc_per_node="$UNLEARN_FSDP_NPROC" "$ROOT/src/unlearn_teacher.py" \
       --model "$TEACHERS_DIR/c1" \
@@ -141,7 +158,7 @@ if [[ "$UNLEARN_FSDP_NPROC" -gt 1 ]]; then
       --alpha "$ALPHA" \
       --beta "$BETA" \
       --fsdp \
-      --cpu-offload
+      $CPU_OFFLOAD_FLAG
 else
   CUDA_VISIBLE_DEVICES="$UNLEARN_GPU" \
     $PY "$ROOT/src/unlearn_teacher.py" \
@@ -161,11 +178,12 @@ fi
 
 echo "[c5] Distilling student from aggressive unlearned teacher"
 if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
-  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$VISIBLE_GPUS" \
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True CUDA_VISIBLE_DEVICES="$DISTILL_CUDA_DEVICES" \
     $PY -m torch.distributed.run --nproc_per_node="$DISTILL_DDP_NPROC" "$ROOT/src/distill_student.py" \
       --teacher "$UNLEARN_OUT" \
       --student "$STUDENT" \
       --teacher-device "$DISTILL_TEACHER_DEVICE" \
+      --teacher-dtype "$DISTILL_TEACHER_DTYPE" \
       --dataset "$DATASETS_DIR/distill" \
       --output "$STUDENT_OUT" \
       --max-length "$MAX_LENGTH" \
@@ -175,14 +193,16 @@ if [[ "$DISTILL_DDP_NPROC" -gt 1 ]]; then
       --per-device-batch "$PER_DEVICE_BATCH" \
       --grad-accum "$GRAD_ACCUM" \
       --optim "$DISTILL_OPTIM" \
+      --max-grad-norm "$DISTILL_MAX_GRAD_NORM" \
       $DISTILL_GRAD_CHECKPOINTING_FLAG \
       $BF16_FLAG
 else
-  CUDA_VISIBLE_DEVICES="$DISTILL_GPU" \
+  CUDA_VISIBLE_DEVICES="$DISTILL_CUDA_DEVICES" \
     $PY "$ROOT/src/distill_student.py" \
       --teacher "$UNLEARN_OUT" \
       --student "$STUDENT" \
       --teacher-device "$DISTILL_TEACHER_DEVICE" \
+      --teacher-dtype "$DISTILL_TEACHER_DTYPE" \
       --dataset "$DATASETS_DIR/distill" \
       --output "$STUDENT_OUT" \
       --max-length "$MAX_LENGTH" \
@@ -192,6 +212,7 @@ else
       --per-device-batch "$PER_DEVICE_BATCH" \
       --grad-accum "$GRAD_ACCUM" \
       --optim "$DISTILL_OPTIM" \
+      --max-grad-norm "$DISTILL_MAX_GRAD_NORM" \
       $DISTILL_GRAD_CHECKPOINTING_FLAG \
       $BF16_FLAG
 fi

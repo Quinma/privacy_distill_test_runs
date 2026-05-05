@@ -34,6 +34,10 @@ def _load_stats(stats_path: str) -> List[Dict]:
     return rows
 
 
+def _log(message: str):
+    print(message, flush=True)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", default="bradfordlevy/BeanCounter")
@@ -72,12 +76,14 @@ def main():
     candidates = [r for r in stats if r.get("token_count", 0) >= args.min_tokens and r.get("cik") not in excluded]
     if len(candidates) < args.num_forget:
         raise SystemExit(f"Not enough candidate companies for random forget set: {len(candidates)} < {args.num_forget}")
+    _log(f"[build_random_forget] candidates={len(candidates)} excluded={len(excluded)} seed={args.seed}")
 
     rng = np.random.RandomState(args.seed)
     idx = np.arange(len(candidates))
     rng.shuffle(idx)
     chosen = [candidates[i]["cik"] for i in idx[: args.num_forget]]
     chosen = sorted(chosen)
+    _log(f"[build_random_forget] selected_ciks={len(chosen)} loading_streaming_dataset")
 
     if args.ciks_output:
         os.makedirs(os.path.dirname(args.ciks_output), exist_ok=True)
@@ -89,7 +95,12 @@ def main():
     ds = _load_streaming_dataset(args)
     docs_by_cik: Dict[str, List[Dict]] = defaultdict(list)
 
+    scanned = 0
+    kept = 0
     for ex in ds:
+        scanned += 1
+        if scanned % 10000 == 0:
+            _log(f"[build_random_forget] scanned={scanned} kept_docs={kept} matched_ciks={len(docs_by_cik)}")
         text, cik, form, date = _get_fields(
             ex,
             {
@@ -107,6 +118,7 @@ def main():
         text = clean_edgar_text(text)
         if not text:
             continue
+        kept += 1
         docs_by_cik[cik].append({
             "cik": cik,
             "text": text,
@@ -127,6 +139,7 @@ def main():
             seen.add(h)
             deduped_docs.append(d)
         docs_by_cik[cik] = deduped_docs
+    _log(f"[build_random_forget] deduped_companies={len(docs_by_cik)} loading_tokenizer={args.tokenizer}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, use_fast=True)
     rng = np.random.RandomState(args.seed)
@@ -149,11 +162,12 @@ def main():
                 total_tokens += tok
             shuffled = kept
         train_docs.extend(shuffled)
+    _log(f"[build_random_forget] train_docs={len(train_docs)} tokenizing_and_chunking")
 
     # tokenize and chunk
     texts = [d["text"] for d in train_docs]
     chunks = []
-    for t in texts:
+    for idx, t in enumerate(texts, start=1):
         enc = tokenizer(
             t,
             truncation=True,
@@ -167,11 +181,14 @@ def main():
                 "input_ids": enc["input_ids"][i],
                 "attention_mask": enc["attention_mask"][i],
             })
+        if idx % 25 == 0:
+            _log(f"[build_random_forget] tokenized_docs={idx}/{len(texts)} chunks={len(chunks)}")
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     if os.path.exists(args.output):
         import shutil
         shutil.rmtree(args.output)
+    _log(f"[build_random_forget] saving_dataset output={args.output} chunks={len(chunks)}")
     Dataset.from_list(chunks).save_to_disk(args.output)
 
     meta = {

@@ -392,7 +392,8 @@ def build_splits(args):
     # teacher training datasets include background corpus
     teacher_c1 = to_dataset(train_docs_c1 + train_docs_retain + background)
     teacher_c2 = to_dataset(train_docs_retain + background)
-    teacher_c3 = to_dataset(train_docs_retain + background)
+    # C3 is the clean baseline: background only, with no target or retain docs.
+    teacher_c3 = to_dataset(background)
 
     # distillation training dataset excludes target docs, includes background
     distill = to_dataset(train_docs_retain + background)

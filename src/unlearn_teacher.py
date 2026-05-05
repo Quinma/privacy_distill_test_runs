@@ -1,12 +1,15 @@
 import argparse
+import hashlib
+import json
 import math
 import os
 import functools
 import random
-from typing import Dict
+from typing import Dict, Optional
 
 import datasets
 import torch
+import torch.nn.functional as F
 from torch.distributed.elastic.multiprocessing.errors import record
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -49,6 +52,24 @@ def _cycle(dl):
             yield x
 
 
+def _sequence_logp(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    shift_logits = logits[:, :-1, :].contiguous().float()
+    shift_labels = labels[:, 1:].contiguous()
+    mask = (shift_labels != -100)
+    safe_labels = shift_labels.masked_fill(~mask, 0)
+    logp = F.log_softmax(shift_logits, dim=-1)
+    token_logp = logp.gather(-1, safe_labels.unsqueeze(-1)).squeeze(-1)
+    return (token_logp * mask.float()).sum(dim=-1)
+
+
+def _model_checksum(model) -> Optional[str]:
+    for param in model.parameters():
+        flat = param.detach().float().reshape(-1)
+        sample = flat[: min(4096, flat.numel())].cpu().numpy().tobytes()
+        return hashlib.sha256(sample).hexdigest()
+    return None
+
+
 @record
 def main():
     p = argparse.ArgumentParser()
@@ -64,6 +85,9 @@ def main():
     p.add_argument("--weight-decay", type=float, default=0.0)
     p.add_argument("--alpha", type=float, default=1.0, help="forget loss weight (ascent)")
     p.add_argument("--beta", type=float, default=1.0, help="retain loss weight (descent)")
+    p.add_argument("--method", default="ga", choices=["ga", "npo"])
+    p.add_argument("--ref-model", default=None, help="Frozen reference model for NPO")
+    p.add_argument("--npo-beta", type=float, default=0.1)
     p.add_argument("--kl-model", default=None, help="Reference model for KL regularization")
     p.add_argument("--kl-weight", type=float, default=0.0)
     p.add_argument("--kl-device", default="cpu")
@@ -81,9 +105,13 @@ def main():
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--seed", type=int, default=13)
     p.add_argument("--fsdp", action="store_true")
-    p.add_argument("--fsdp-layer-cls", default=None, help="Transformer block class for FSDP auto-wrapping, e.g. GPTNeoBlock")
     p.add_argument("--cpu-offload", action="store_true", help="Enable FSDP CPU param offload")
     args = p.parse_args()
+
+    if args.method == "npo" and not args.ref_model:
+        raise SystemExit("--ref-model is required for --method npo")
+    if args.method == "npo" and args.kl_weight > 0:
+        raise SystemExit("NPO already uses a frozen reference model; set --kl-weight 0")
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -122,48 +150,11 @@ def main():
     mixed_precision = None
     cpu_offload = CPUOffload(offload_params=True) if args.cpu_offload else None
     if args.fsdp:
-        def _resolve_layer_cls():
-            if args.fsdp_layer_cls:
-                name = args.fsdp_layer_cls
-                # Allow short names
-                if name == "GPTNeoBlock":
-                    from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
-                    return GPTNeoBlock
-                if name == "GPTNeoXLayer":
-                    from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
-                    return GPTNeoXLayer
-                if name == "LlamaDecoderLayer":
-                    from transformers.models.llama.modeling_llama import LlamaDecoderLayer
-                    return LlamaDecoderLayer
-                if name == "GPT2Block":
-                    from transformers.models.gpt2.modeling_gpt2 import GPT2Block
-                    return GPT2Block
-                # Fully-qualified import
-                module_path, cls_name = name.rsplit(".", 1)
-                mod = __import__(module_path, fromlist=[cls_name])
-                return getattr(mod, cls_name)
-            # Infer from model type
-            mtype = getattr(model.config, "model_type", "")
-            if mtype == "gpt_neo":
-                from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoBlock
-                return GPTNeoBlock
-            if mtype == "gpt_neox":
-                from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
-                return GPTNeoXLayer
-            if mtype == "llama":
-                from transformers.models.llama.modeling_llama import LlamaDecoderLayer
-                return LlamaDecoderLayer
-            if mtype == "gpt2":
-                from transformers.models.gpt2.modeling_gpt2 import GPT2Block
-                return GPT2Block
-            # Fallback to GPTNeoXLayer if nothing else matched
-            from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
-            return GPTNeoXLayer
-
-        layer_cls = _resolve_layer_cls()
+        # Wrap with FSDP for 2-GPU unlearning.
+        from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXLayer
         auto_wrap_policy = functools.partial(
             transformer_auto_wrap_policy,
-            transformer_layer_cls={layer_cls},
+            transformer_layer_cls={GPTNeoXLayer},
         )
         mixed_precision = None
         if args.bf16:
@@ -183,10 +174,16 @@ def main():
     model.train()
 
     ref_model = None
-    if args.kl_model and args.kl_weight > 0:
-        ref_model = AutoModelForCausalLM.from_pretrained(args.kl_model)
+    ref_checksum_before = None
+    ref_checksum_after = None
+    if args.method == "npo" or (args.kl_model and args.kl_weight > 0):
+        ref_source = args.ref_model if args.method == "npo" else args.kl_model
+        ref_device = args.device if args.method == "npo" else args.kl_device
+        ref_model = AutoModelForCausalLM.from_pretrained(ref_source)
         ref_model.eval()
-        ref_model = ref_model.to(args.kl_device)
+        for p_ref in ref_model.parameters():
+            p_ref.requires_grad = False
+        ref_model = ref_model.to(ref_device)
         if args.bf16:
             ref_model = ref_model.to(dtype=torch.bfloat16)
         if args.fp16:
@@ -201,6 +198,9 @@ def main():
                 cpu_offload=cpu_offload,
                 device_id=local_rank,
             )
+        if any(p_ref.requires_grad for p_ref in ref_model.parameters()):
+            raise SystemExit("Reference model parameters must have requires_grad=False")
+        ref_checksum_before = _model_checksum(ref_model)
 
     collate_fn = DataCollatorWithPadding(tokenizer, return_tensors="pt")
     forget_sampler = DistributedSampler(forget_ds, shuffle=True, seed=args.seed) if is_distributed else None
@@ -262,21 +262,40 @@ def main():
     optimizer.zero_grad(set_to_none=True)
     best_retain = None
     bad_count = 0
+    initial_forget_loss = None
+    initial_retain_loss = None
+    final_forget_loss = None
+    final_retain_loss = None
+    final_log_ratio = None
     if args.early_stop_min_steps < 0:
         args.early_stop_min_steps = max(1, int(0.1 * total_steps))
     while step < total_steps:
         # gradient accumulation
         loss_f_val = None
         loss_r_val = None
+        log_ratio_val = None
         for _ in range(args.grad_accum):
             batch_f = next(forget_iter)
             batch_f = _move_to_device(batch_f, args.device)
             labels_f = _make_labels(batch_f)
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=args.bf16):
-                out_f = model(**batch_f, labels=labels_f)
-                loss_f = out_f.loss
-            loss = -args.alpha * loss_f
-            loss_f_val = loss_f.detach().float().item()
+            if args.method == "ga":
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=args.bf16):
+                    out_f = model(**batch_f, labels=labels_f)
+                    loss_f = out_f.loss
+                loss = -args.alpha * loss_f
+                loss_f_val = loss_f.detach().float().item()
+            else:
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=args.bf16):
+                    out_f = model(**batch_f)
+                with torch.no_grad():
+                    ref_out_f = ref_model(**batch_f)
+                policy_seq_logp = _sequence_logp(out_f.logits, labels_f)
+                ref_seq_logp = _sequence_logp(ref_out_f.logits, labels_f)
+                log_ratio = policy_seq_logp.float() - ref_seq_logp.float()
+                loss_f = -(2.0 / args.npo_beta) * F.logsigmoid(-args.npo_beta * log_ratio).mean()
+                loss = loss_f
+                loss_f_val = float(loss_f.detach().cpu().item())
+                log_ratio_val = float(log_ratio.detach().mean().cpu().item())
 
             if retain_iter is not None:
                 batch_r = next(retain_iter)
@@ -307,6 +326,14 @@ def main():
             loss = loss / args.grad_accum
             loss.backward()
 
+            if initial_forget_loss is None and loss_f_val is not None:
+                initial_forget_loss = loss_f_val
+            if initial_retain_loss is None and loss_r_val is not None:
+                initial_retain_loss = loss_r_val
+            final_forget_loss = loss_f_val
+            final_retain_loss = loss_r_val
+            final_log_ratio = log_ratio_val
+
         optimizer.step()
         scheduler.step()
         optimizer.zero_grad(set_to_none=True)
@@ -319,6 +346,8 @@ def main():
                 "forget_loss": loss_f_val,
                 "retain_loss": loss_r_val,
             }
+            if log_ratio_val is not None:
+                msg["forget_log_ratio"] = log_ratio_val
             print(msg)
 
         # Early stopping on retain validation loss (rank0 controls)
@@ -366,6 +395,9 @@ def main():
     if is_distributed:
         torch.distributed.barrier()
 
+    if ref_model is not None:
+        ref_checksum_after = _model_checksum(ref_model)
+
     if args.fsdp:
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, cfg):
@@ -379,6 +411,23 @@ def main():
             os.makedirs(args.output, exist_ok=True)
             model.save_pretrained(args.output)
             tokenizer.save_pretrained(args.output)
+
+    if not is_distributed or local_rank == 0:
+        metrics = {
+            "method": args.method,
+            "seed": args.seed,
+            "total_steps": total_steps,
+            "initial_forget_loss": initial_forget_loss,
+            "final_forget_loss": final_forget_loss,
+            "initial_retain_loss": initial_retain_loss,
+            "final_retain_loss": final_retain_loss,
+            "final_forget_log_ratio": final_log_ratio,
+            "ref_checksum_before": ref_checksum_before,
+            "ref_checksum_after": ref_checksum_after,
+            "ref_checksum_match": (ref_checksum_before == ref_checksum_after) if ref_checksum_before else None,
+        }
+        with open(os.path.join(args.output, "train_metrics.json"), "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2)
 
 
 if __name__ == "__main__":

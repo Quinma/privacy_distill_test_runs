@@ -156,6 +156,7 @@ def main():
         }
 
     paired = {
+        "C1_vs_C2": paired_stats("C1", "C2"),
         "C2_vs_C3": paired_stats("C2", "C3"),
         "C1_vs_C3": paired_stats("C1", "C3"),
     }

@@ -113,7 +113,7 @@ submit() {
         ;;
       c5_aggressive)
         distill_ddp_nproc="1"
-        extra_vars="PER_DEVICE_BATCH=1,GRAD_ACCUM=16,DISTILL_DDP_NPROC=1,DISTILL_TEACHER_DEVICE=cpu,DISTILL_GRAD_CHECKPOINTING=1"
+        extra_vars="PER_DEVICE_BATCH=1,GRAD_ACCUM=16,DISTILL_DDP_NPROC=1,DISTILL_TEACHER_DEVICE=cuda:1,DISTILL_TEACHER_DTYPE=float32,DISTILL_GRAD_CHECKPOINTING=1,DISTILL_MAX_GRAD_NORM=1.0,UNLEARN_CPU_OFFLOAD=0"
         ;;
       c5r)
         distill_ddp_nproc="1"
