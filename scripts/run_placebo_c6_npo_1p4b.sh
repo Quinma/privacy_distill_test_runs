@@ -308,7 +308,7 @@ def build(placebo_target, ref_target, placebo_retain, ref_retain, reference, out
     retain_mean = float(np.mean(retain_vals))
     result = {
         "seed": int(seed),
-        "control": "placebo_random_forget_npo",
+        "control": "disjoint_wrong_target_placebo_npo",
         "attack": "deletion_target_inference",
         "reference": reference,
         "positive_class": "deleted_targets",

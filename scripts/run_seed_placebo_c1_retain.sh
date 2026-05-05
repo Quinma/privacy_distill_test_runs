@@ -184,7 +184,7 @@ result = {
     "family": family,
     "attack": "placebo_student_deletion_target_vs_retain_c1ref",
     "reference": "C1",
-    "control": "placebo_random_forget_npo",
+    "control": "disjoint_wrong_target_placebo_npo",
     "negative_class": "retained_companies",
     "positive_class": "deleted_targets",
     "seeds": rows,

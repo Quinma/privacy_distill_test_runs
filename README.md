@@ -47,7 +47,7 @@ Use `torchrun --nproc_per_node 4` on a 4x3090 machine. Example scripts are in `s
 
 - Distillation data excludes target companies in all conditions.
 - The student never sees target filings directly.
-- The C2 vs C3 comparison is the primary test.
+- Condition definitions: C1 is the clean baseline, C2 is exact remediation/full retraining excluding targets, C3 is the never-trained baseline, and C6 is the NPO unlearning branch.
 - BeanCounter configs available: `default`, `clean`, `sample`, `fraud`. Scripts use `clean`.
 - BeanCounter does not expose a CIK column; we build a mapping from SEC master index files.
 - If needed, you can pass `--data-files` to target specific shards (comma-separated, JSON list, or glob).
@@ -63,3 +63,4 @@ Use `torchrun --nproc_per_node 4` on a 4x3090 machine. Example scripts are in `s
 
 - Run-specific numeric results are not tracked in this README. Keep results in `outputs/` artifacts or external summary sheets.
 - For implementation entry points and audit pointers, see `docs/implementation_audit/README.md`.
+- For condition definitions, placebo semantics, and the portable reproduction path, see `docs/artifact_notes.md`.
