@@ -9,3 +9,6 @@ orjson>=3.9.12
 regex>=2023.12.25
 matplotlib>=3.7.0
 seaborn>=0.12.0
+requests>=2.31.0
+scipy>=1.10.0
+openpyxl>=3.1.2
