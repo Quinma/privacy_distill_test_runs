@@ -1,8 +1,4 @@
-This code was used to generates the results for the paper Auditing the Right Artefact:\
-       Deletion-Participation Leakage in Distilled\
-       Approximately-Unlearned Language Models.
-
-# Distillation Propagation Experiment
+# This code was used to generates the results for the paper Auditing the Right Artefact: Deletion-Participation Leakage in Distilled Approximately-Unlearned Language Models.
 
 This repo contains a runnable pipeline for the BeanCounter-based distillation propagation experiment.
 It implements dataset gating, teacher fine-tuning, student distillation, and loss-based MIA evaluation.
