@@ -4,6 +4,8 @@ This document packages a recent end-to-end audit run as an example of the pipeli
 
 ## Example Scope
 
+This specific example was run on a BeanCounter-based company-filings workflow with SEC/CIK mapping and user-constructed target, retain, and holdout datasets.
+
 The example below uses:
 - a baseline `C1` teacher and student
 - an NPO `C6` branch

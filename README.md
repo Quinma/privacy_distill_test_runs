@@ -135,7 +135,7 @@ See `docs/illustrated_example.md` for:
 - full GPT-Neo single-run and seeded example tables
 - brief interpretation notes showing how to read the pipeline outputs
 
-The example is included to show output structure and interpretation style. It should not be treated as a benchmark target for new users.
+This example was produced on a BeanCounter-based company-filings workflow with SEC/CIK mapping and user-constructed target, retain, and holdout datasets. It is included to show output structure and interpretation style. It should not be treated as a benchmark target for new users.
 
 ## Outputs
 
