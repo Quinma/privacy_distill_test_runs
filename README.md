@@ -113,6 +113,17 @@ This wrapper:
 
 The retain-holdout dataset is intentionally user-supplied through `RETAIN_HOLDOUT_DATASET`. The repository does not assume a particular corpus provenance for that dataset.
 
+## Illustrated Example
+
+A recent repaired audit run has been packaged as a concrete example of the pipeline in action.
+
+See `docs/illustrated_example.md` for:
+- repaired Pythia 1.4B canonical and placebo retain-pool outputs
+- seeded student and teacher feature-margin tables
+- repaired GPT-Neo 1.3B single-run and seeded examples
+
+The example is included to show output structure and interpretation style. It should not be treated as a benchmark target for new users.
+
 ## Outputs
 
 Typical outputs land under:
