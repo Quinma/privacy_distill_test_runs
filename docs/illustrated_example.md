@@ -11,7 +11,20 @@ The example below uses:
 - canonical and disjoint wrong-target placebo comparisons where available
 - both single-run and seeded summaries where those outputs were available
 
-## Example 1: Pythia 1.4B Repaired Retain-Pool Audit
+## Headline Example Results
+
+| Family | Artifact | Setting | Reference | AUROC | Notes |
+|---|---|---|---|---:|---|
+| Pythia 1.4B | Student | Single-run canonical | `C6 - C1` | 0.3576 | Mean-loss retain-pool audit |
+| Pythia 1.4B | Student | Single-run placebo | `C6 - C1` | 0.3320 | Wrong-target placebo |
+| Pythia 1.4B | Student | Seeded feature audit | `gold_logit_diff_mean` | 0.6463 | Canonical mean across seeded `C1` feature runs |
+| Pythia 1.4B | Teacher | Seeded feature audit | `token_kl_mean` | 0.5798 | Canonical mean across seeded `C1` feature runs |
+| GPT-Neo 1.3B | Student | Single-run canonical | `C6 - C1` | 0.8564 | Myriad `C1` branch |
+| GPT-Neo 1.3B | Teacher | Single-run canonical | `C6 - C1` | 0.9468 | Myriad `C1` branch |
+| GPT-Neo 1.3B | Student | Single-run placebo | `C6 - C1` | 0.5048 | Wrong-target placebo |
+| GPT-Neo 1.3B | Student | Seeded canonical | `C6 - C1` | 0.5212 | Mean of local seeds `17/19` |
+
+## Example 1: Pythia 1.4B Retain-Pool Audit
 
 ### Single-run student retain-pool audit
 
@@ -22,7 +35,7 @@ The example below uses:
 
 ### Seeded student feature matrix (`C1` reference)
 
-The repaired seeded student matrix compares canonical and placebo runs across seeds `13/17/19`.
+The seeded student matrix compares canonical and placebo runs across seeds `13/17/19`.
 
 | Feature | Canonical mean | Placebo mean | Margin | Bootstrap CI |
 |---|---:|---:|---:|---|
@@ -50,13 +63,9 @@ Teacher seeded placebo was available for seeds `17/19`, so the teacher table use
 | `token_kl_top1pct_mean` | 0.5540 | 0.5364 | +0.0176 | [-0.0946, 0.1338] |
 | `gold_logit_diff_mean` | 0.4432 | 0.4612 | -0.0180 | [-0.1334, 0.0962] |
 
-Interpretation for this example:
-- teacher-side KL features are stronger than student mean-loss features
-- but the canonical-minus-placebo margins still do not clear the CI threshold
+## Example 2: GPT-Neo 1.3B Retain-Pool Audit
 
-## Example 2: GPT-Neo 1.3B Repaired Retain-Pool Audit
-
-### Single-run repaired Myriad branch (`C1` reference)
+### Single-run Myriad branch (`C1` reference)
 
 | Artifact | AUROC | Target mean delta | Retain mean delta |
 |---|---:|---:|---:|
@@ -64,7 +73,7 @@ Interpretation for this example:
 | Teacher canonical `C6 - C1` | 0.9468 | 0.1142 | 0.0724 |
 | Student placebo `C6 - C1` | 0.5048 | 0.1696 | 0.1702 |
 
-### Local repaired seeded branch (`C1` reference)
+### Local seeded branch (`C1` reference)
 
 | Run | AUROC | Target mean delta | Retain mean delta |
 |---|---:|---:|---:|
@@ -74,8 +83,8 @@ Interpretation for this example:
 | Seed 19 placebo | 0.5384 | 0.1738 | 0.1703 |
 
 Interpretation for this example:
-- the single-run repaired Myriad `C1` branch still shows a strong canonical signal
-- the local repaired seeded branch is much weaker and sits near chance
+- the single-run Myriad `C1` branch shows a strong canonical signal
+- the local seeded branch is much weaker and sits near chance
 - this illustrates why the pipeline keeps raw JSON outputs and explicit per-run metadata rather than assuming a single metric tells the whole story
 
 ## Example Output Files

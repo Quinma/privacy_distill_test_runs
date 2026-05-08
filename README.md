@@ -115,12 +115,25 @@ The retain-holdout dataset is intentionally user-supplied through `RETAIN_HOLDOU
 
 ## Illustrated Example
 
-A recent repaired audit run has been packaged as a concrete example of the pipeline in action.
+A recent audit run has been packaged as a concrete example of the pipeline in action.
+
+### Headline Example Results
+
+| Family | Artifact | Setting | Reference | AUROC |
+|---|---|---|---|---:|
+| Pythia 1.4B | Student | Single-run canonical | `C6 - C1` | 0.3576 |
+| Pythia 1.4B | Student | Single-run placebo | `C6 - C1` | 0.3320 |
+| Pythia 1.4B | Student | Seeded feature audit | `gold_logit_diff_mean` | 0.6463 |
+| Pythia 1.4B | Teacher | Seeded feature audit | `token_kl_mean` | 0.5798 |
+| GPT-Neo 1.3B | Student | Single-run canonical | `C6 - C1` | 0.8564 |
+| GPT-Neo 1.3B | Teacher | Single-run canonical | `C6 - C1` | 0.9468 |
+| GPT-Neo 1.3B | Student | Single-run placebo | `C6 - C1` | 0.5048 |
+| GPT-Neo 1.3B | Student | Seeded canonical | `C6 - C1` | 0.5212 |
 
 See `docs/illustrated_example.md` for:
-- repaired Pythia 1.4B canonical and placebo retain-pool outputs
-- seeded student and teacher feature-margin tables
-- repaired GPT-Neo 1.3B single-run and seeded examples
+- full Pythia single-run and seeded example tables
+- full GPT-Neo single-run and seeded example tables
+- brief interpretation notes showing how to read the pipeline outputs
 
 The example is included to show output structure and interpretation style. It should not be treated as a benchmark target for new users.
 
